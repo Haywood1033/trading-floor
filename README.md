@@ -40,7 +40,8 @@ Mockup: `mockup/index.html` (sample data, simulated prices).
 ## Build order
 
 1. ⬜ Broker adapters in read-only mode: sync holdings, cash and prices.
-   Interface and paper broker done (`src/brokers/`); Alpaca and Robinhood crypto next.
+   Interface, paper broker and Alpaca adapter done (`src/brokers/`); `npm run sync` prints the
+   Alpaca paper account read-only. Robinhood crypto (read-only) next.
 2. ✅ Risk manager, kill switch, execution gate and audit log, with tests (`src/risk/`, `src/core/`).
 3. ⬜ Portfolio reviewer quant (flags stagnant holdings): useful on day one, no execution needed.
 4. ⬜ Accuracy tracking and tiers per quant.
@@ -63,5 +64,13 @@ alone does not fit a live trading loop.
 - `src/core/execute.js`: the only path to a broker: kill switch, then risk manager, then broker, all logged
 - `src/core/auditLog.js`: append-only audit trail
 - `src/brokers/adapter.js`, `src/brokers/paper.js`: broker interface and paper broker
+- `src/brokers/alpaca.js`: Alpaca stocks + crypto; paper and read-only unless told otherwise
+- `src/core/sectors.js`: symbol → sector lookup for the sector caps
+- `scripts/sync.js`: read-only account printout
 
 Run tests with `npm test` (Node 20+, no dependencies).
+
+## Setup
+
+Set `ALPACA_KEY_ID` and `ALPACA_SECRET_KEY` (paper keys from the Alpaca dashboard) in the
+environment, never in the repo. Then `npm run sync`.

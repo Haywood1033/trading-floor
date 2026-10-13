@@ -6,6 +6,7 @@
   "description": "Personal automated trading desk: quant signals, approval queue, risk manager, kill switch, broker sync.",
   "engines": { "node": ">=20" },
   "scripts": {
-    "test": "node --test test/*.test.js"
+    "test": "node --test test/*.test.js",
+    "sync": "node scripts/sync.js"
   }
 }
