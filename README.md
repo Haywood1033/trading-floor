@@ -46,8 +46,12 @@ Mockup: `mockup/index.html` (sample data, simulated prices).
 3. ✅ Portfolio reviewer quant (`src/quants/portfolioReviewer.js`): flags stagnant holdings and
    oversized positions, proposes sells for the approval queue. `npm run review` on sample data;
    `npm run review -- --alpaca` on the paper account once it's connected.
-4. ⬜ Accuracy tracking and tiers per quant.
-5. ⬜ Momentum quant in paper mode.
+4. ✅ Accuracy tracking and tiers (`src/tracking/`): every proposal is recorded as a call and
+   graded after 63 trading days against SPY (or BTC for coins). Tiers use the Wilson lower bound
+   of the hit rate and need 20+ graded calls. `npm run quants` records calls, `npm run grade` grades
+   due calls and prints each quant's record.
+5. ✅ Momentum quant (`src/quants/momentum.js`): buys the top 5 of a 19-name universe on
+   12-1 month return, above the 200-day average, sized to ~5% of the account.
 6. ⬜ Approval-mode execution with phone notifications.
 7. ⬜ Auto mode within limits, for proven quants only.
 
@@ -72,6 +76,17 @@ alone does not fit a live trading loop.
 - `src/quants/portfolioReviewer.js`, `src/quants/indicators.js`: the portfolio reviewer quant
 - `src/data/sample.js`: SAMPLE portfolio and synthetic prices, used until a broker is connected
 - `scripts/review.js`: prints the reviewer's verdicts and proposed orders (never trades)
+- `src/quants/momentum.js`: momentum quant
+- `src/tracking/tracker.js`, `src/tracking/stats.js`: call recording, grading, Wilson-bound tiers
+- `scripts/quants.js`: runs every quant, risk-checks and records each call (never trades)
+- `scripts/grade.js`: grades due calls, prints the scoreboard
+
+### How calls are graded
+
+A buy is right if the stock beat its benchmark over the next 63 trading days; a sell is right
+if the stock trailed it (selling avoided the underperformance). The benchmark is SPY for stocks
+and BTC for other coins. Tiers: Elite (lower bound ≥ 55%), All-Star (≥ 50%), Value (hit rate
+≥ 52% and beating the benchmark on average), otherwise Unproven. Only proven tiers can auto-trade.
 
 ### Portfolio reviewer rules
 

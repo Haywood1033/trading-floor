@@ -165,7 +165,7 @@ td.r, th.r { text-align: right; }
 <body>
 
 <div class="wrap">
-  <div class="sample"><b>Mockup</b> Sample portfolio and simulated prices. Portfolio reviewer orders come from the real quant code run on sample data. Nothing here is connected to a broker.</div>
+  <div class="sample"><b>Mockup</b> Sample portfolio and simulated prices. Every order comes from the real quant code (portfolio reviewer and momentum) run on sample data. Nothing here is connected to a broker.</div>
 
   <header class="bar">
     <div class="brand">Trading <span>Floor</span></div>
@@ -250,15 +250,37 @@ td.r, th.r { text-align: right; }
 (function () {
   const LIMITS = { position: 0.10, crypto: 0.20, tech: 0.40, cashFloor: 0.05, dayLoss: -0.02, autoMax: 1500, dayTrades: 3 };
   const META = {
-    AAPL: { sector: 'Tech', type: 'stock' }, MSFT: { sector: 'Tech', type: 'stock' }, INTC: { sector: 'Tech', type: 'stock' },
-    NVDA: { sector: 'Tech', type: 'stock' }, TSLA: { sector: 'Auto', type: 'stock' }, F: { sector: 'Auto', type: 'stock' },
-    T: { sector: 'Telecom', type: 'stock' }, DIS: { sector: 'Media', type: 'stock' }, PFE: { sector: 'Health', type: 'stock' },
-    XLE: { sector: 'Energy', type: 'stock' }, BTC: { sector: 'Crypto', type: 'crypto' }, ETH: { sector: 'Crypto', type: 'crypto' },
+    AAPL: { sector: 'Tech', type: 'stock' },
+    MSFT: { sector: 'Tech', type: 'stock' },
+    INTC: { sector: 'Tech', type: 'stock' },
+    NVDA: { sector: 'Tech', type: 'stock' },
+    AMZN: { sector: 'Retail', type: 'stock' },
+    GOOGL: { sector: 'Tech', type: 'stock' },
+    META: { sector: 'Tech', type: 'stock' },
+    AVGO: { sector: 'Tech', type: 'stock' },
+    LLY: { sector: 'Health', type: 'stock' },
+    JPM: { sector: 'Financials', type: 'stock' },
+    XOM: { sector: 'Energy', type: 'stock' },
+    COST: { sector: 'Retail', type: 'stock' },
+    WMT: { sector: 'Retail', type: 'stock' },
+    HD: { sector: 'Retail', type: 'stock' },
+    UNH: { sector: 'Health', type: 'stock' },
+    TSLA: { sector: 'Auto', type: 'stock' },
+    XLE: { sector: 'Energy', type: 'stock' },
+    XLF: { sector: 'Financials', type: 'stock' },
+    XLV: { sector: 'Health', type: 'stock' },
+    QQQ: { sector: 'Tech', type: 'stock' },
+    F: { sector: 'Auto', type: 'stock' },
+    T: { sector: 'Telecom', type: 'stock' },
+    DIS: { sector: 'Media', type: 'stock' },
+    PFE: { sector: 'Health', type: 'stock' },
+    BTC: { sector: 'Crypto', type: 'crypto' },
+    ETH: { sector: 'Crypto', type: 'crypto' },
     SOL: { sector: 'Crypto', type: 'crypto' }
   };
-  const px = { AAPL: 228.40, MSFT: 431.10, INTC: 22.10, NVDA: 138.40, TSLA: 251.00, F: 10.85, T: 21.60, DIS: 96.30, PFE: 26.40, XLE: 91.20, BTC: 63800, ETH: 2540, SOL: 148.0 };
-  const prev = { AAPL: 226.90, MSFT: 433.00, INTC: 22.25, NVDA: 135.10, TSLA: 247.80, F: 10.88, T: 21.52, DIS: 96.70, PFE: 26.55, XLE: 90.40, BTC: 62900, ETH: 2512, SOL: 144.5 };
-  const r6m = {SPY: 0.088, AAPL: 0.06, MSFT: 0.011, INTC: -0.149, F: -0.091, T: 0.029, DIS: -0.09, PFE: -0.083, BTC: 0.096, ETH: -0.071, SOL: 0.074, NVDA: 0.21, TSLA: 0.15, XLE: 0.05};
+  const px = { AAPL: 228.4, MSFT: 431.1, INTC: 22.1, NVDA: 138.4, AMZN: 186, GOOGL: 165, META: 590, AVGO: 172, LLY: 880, JPM: 222, XOM: 118, COST: 890, WMT: 80, HD: 400, UNH: 560, TSLA: 251, XLE: 91.2, XLF: 47, XLV: 150, QQQ: 495, F: 10.85, T: 21.6, DIS: 96.3, PFE: 26.4, BTC: 63800, ETH: 2540, SOL: 148 };
+  const prev = { AAPL: 227.365, MSFT: 426.587, INTC: 22.3369, NVDA: 137.7317, AMZN: 183.8163, GOOGL: 166.8406, META: 590.5388, AVGO: 169.7308, LLY: 894.0953, JPM: 222.7301, XOM: 117.7148, COST: 882.9571, WMT: 80.4185, HD: 399.6884, UNH: 556.0582, TSLA: 257.7268, XLE: 91.4592, XLF: 46.8774, XLV: 149.0439, QQQ: 497.3529, F: 10.8362, T: 21.4631, DIS: 97.2855, PFE: 26.4842, BTC: 63022.8476, ETH: 2471.7483, SOL: 150.2518 };
+  const r6m = { AAPL: 0.06, MSFT: 0.011, INTC: -0.149, NVDA: 0.176, AMZN: 0.099, GOOGL: 0.11, META: 0.134, AVGO: 0.159, LLY: -0.02, JPM: 0.086, XOM: -0.002, COST: 0.102, WMT: 0.14, HD: 0.053, UNH: -0.094, TSLA: 0.181, XLE: 0.061, XLF: 0.072, XLV: -0.023, QQQ: 0.082, F: -0.091, T: 0.029, DIS: -0.09, PFE: -0.083, BTC: 0.096, ETH: -0.071, SOL: 0.074 };
 
   const state = {
     cash: 4700, startEquity: 0, mode: 'approval', halted: false, dayTrades: 1,
@@ -268,11 +290,11 @@ td.r, th.r { text-align: right; }
   };
 
   const quants = [
-    { id: 'mom', name: 'Momentum', desc: '12-1 month trend, top decile', mode: 'live', hit: 0.58, n: 112, tier: 'elite' },
-    { id: 'earn', name: 'Earnings drift', desc: 'Post-earnings surprise follow-through', mode: 'live', hit: 0.56, n: 64, tier: 'allstar' },
-    { id: 'rev', name: 'Portfolio reviewer', desc: 'Flags stagnant holdings vs sector and SPY', mode: 'live', hit: 0.61, n: 31, tier: 'allstar' },
-    { id: 'mr', name: 'Mean reversion', desc: 'Short-term oversold bounces', mode: 'paper', hit: 0.51, n: 40, tier: 'unproven' },
-    { id: 'cry', name: 'Crypto trend', desc: 'BTC/ETH/SOL trend filter, 4h bars', mode: 'paper', hit: 0.55, n: 23, tier: 'value' }
+    { id: 'rev', name: 'Portfolio reviewer', desc: 'Flags stale holdings vs SPY (stocks) or BTC (coins)', built: true, mode: 'live', hit: null, n: 0, open: 6, tier: 'unproven' },
+    { id: 'mom', name: 'Momentum', desc: '12-1 month return leaders above their 200-day average', built: true, mode: 'live', hit: null, n: 0, open: 5, tier: 'unproven' },
+    { id: 'earn', name: 'Earnings drift', desc: 'Not built yet', built: false, mode: 'off', hit: null, n: 0, open: 0, tier: 'unproven' },
+    { id: 'mr', name: 'Mean reversion', desc: 'Not built yet', built: false, mode: 'off', hit: null, n: 0, open: 0, tier: 'unproven' },
+    { id: 'cry', name: 'Crypto trend', desc: 'Not built yet', built: false, mode: 'off', hit: null, n: 0, open: 0, tier: 'unproven' }
   ];
   const TIER_LABEL = { elite: 'Elite', allstar: 'All-Star', value: 'Value', unproven: 'Unproven' };
   const quantById = id => quants.find(q => q.id === id);
@@ -476,10 +498,10 @@ td.r, th.r { text-align: right; }
   function renderBench() {
     $('bench').innerHTML = quants.map(q => `<tr>
       <td><b>${q.name}</b><div class="qdesc">${q.desc}</div></td>
-      <td class="num"><span class="hitbar"><i style="width:${q.hit * 100}%"></i></span>${(q.hit * 100).toFixed(0)}% <span class="muted">n=${q.n}</span></td>
+      <td class="num">${q.n ? `<span class="hitbar"><i style="width:${q.hit * 100}%"></i></span>${(q.hit * 100).toFixed(0)}% <span class="muted">n=${q.n}</span>` : `<span class="muted">${q.built ? `0 graded · ${q.open} open` : 'not built'}</span>`}</td>
       <td><span class="tier ${q.tier}">${TIER_LABEL[q.tier]}</span></td>
       <td class="r"><div class="seg small" role="group" aria-label="${q.name} mode">${['live', 'paper', 'off'].map(m =>
-        `<button data-q="${q.id}" data-m="${m}" aria-pressed="${q.mode === m}">${m}</button>`).join('')}</div></td></tr>`).join('');
+        `<button data-q="${q.id}" data-m="${m}" aria-pressed="${q.mode === m}" ${q.built ? '' : 'disabled'}>${m}</button>`).join('')}</div></td></tr>`).join('');
   }
   $('bench').addEventListener('click', e => {
     const b = e.target.closest('button[data-q]'); if (!b) return;
@@ -535,14 +557,8 @@ td.r, th.r { text-align: right; }
     if (state.orders.length) renderQueue();
   }
 
-  const IDEAS = [
-    { quant: 'mom', side: 'BUY', sym: 'XLE', qty: 12, conf: 0.64, thesis: '<b>Energy breaking out:</b> 3-month high, sector momentum rank up 4 places this week.' },
-    { quant: 'earn', side: 'BUY', sym: 'MSFT', qty: 2, conf: 0.62, thesis: '<b>Beat and raise:</b> revenue +4% vs consensus, drift historically positive 20 days out.' },
-    { quant: 'rev', side: 'SELL', sym: 'DIS', qty: 18, conf: 0.66, thesis: '<b>Stagnant:</b> −7% over 6 months while media peers are +5%. Frees $1.7k for stronger names.' },
-    { quant: 'mr', side: 'BUY', sym: 'AAPL', qty: 3, conf: 0.53, thesis: '<b>Oversold bounce:</b> RSI(2) under 10 and above 200-day average.' },
-    { quant: 'cry', side: 'BUY', sym: 'ETH', qty: 0.2, conf: 0.57, thesis: '<b>Trend flip:</b> ETH 4h closes above 50-bar average with rising volume.' },
-    { quant: 'mom', side: 'BUY', sym: 'NVDA', qty: 4, conf: 0.69, thesis: '<b>Leadership:</b> top-decile 12-1 month return, new 20-day high.' }
-  ];
+  // Live signals arrive from the quant engine once it runs on a schedule; none are scripted here.
+  const IDEAS = [];
   let ideaIx = 0;
   function newSignal() {
     if (state.halted) return;
@@ -569,28 +585,27 @@ td.r, th.r { text-align: right; }
   })();
   const seedLog = [
     [9, 30, 'system', 'Market open. Portfolio synced: 7 stocks, 3 coins.'],
-    [9, 41, 'fill', 'SELL 0.004 BTC @ $63,120.00 ($252), approved by you'],
-    [10, 5, 'paper', 'Mean reversion: BUY 10 F recorded on paper, not sent'],
-    [11, 22, 'veto', 'AAPL buy held: Tech 42% / 40%'],
-    [12, 48, 'signal', 'Portfolio reviewer: 5 stale holdings, 1 over the 10% limit'],
-    [13, 37, 'paper', 'Crypto trend: BUY 2 SOL recorded on paper, not sent']
+    [9, 35, 'signal', `Portfolio reviewer: 5 stale holdings, 1 over the 10% limit`],
+    [9, 35, 'signal', `Momentum: 5 leaders proposed from a 19-name universe`],
+    [9, 36, 'system', 'All calls recorded for grading in ~3 months. No quant is proven yet, so auto mode will not fill anything.']
   ];
   seedLog.forEach(([h, m, k, t]) => state.log.unshift({ t: new Date(2026, 9, 12, h, m), kind: k, text: t }));
   [
     {"quant": "rev", "side": "SELL", "sym": "INTC", "qty": 95, "conf": 0.6, "thesis": "<b>Stale:</b> trails SPY by 24% over 6 months, down 15% in 6 months, below its 200-day average, 50-day average under the 200-day, 22% off its 52-week high. Sell all, frees $2,100. Selling realizes a $1,201 loss (wash-sale rule: no rebuy within 30 days to keep the loss)."},
-    {"quant": "mom", "side": "BUY", "sym": "NVDA", "qty": 10, "conf": 0.71, "thesis": "<b>Momentum + earnings drift agree:</b> top-decile 12-1 month return and a beat-and-raise quarter."},
     {"quant": "rev", "side": "SELL", "sym": "F", "qty": 220, "conf": 0.55, "thesis": "<b>Stale:</b> trails SPY by 18% over 6 months, down 9% in 6 months, below its 200-day average, 50-day average under the 200-day. Sell all, frees $2,387. Selling realizes a $253 loss (wash-sale rule: no rebuy within 30 days to keep the loss)."},
     {"quant": "rev", "side": "SELL", "sym": "T", "qty": 14, "conf": 0.6, "thesis": "<b>Over the 10% position limit</b> at 10.7%. Trim 14 to get back under. Also trails SPY by 6% over 6 months."},
     {"quant": "rev", "side": "SELL", "sym": "DIS", "qty": 18, "conf": 0.55, "thesis": "<b>Stale:</b> trails SPY by 18% over 6 months, down 9% in 6 months, below its 200-day average, 50-day average under the 200-day. Sell all, frees $1,733. Selling realizes a $247 loss (wash-sale rule: no rebuy within 30 days to keep the loss)."},
     {"quant": "rev", "side": "SELL", "sym": "PFE", "qty": 110, "conf": 0.55, "thesis": "<b>Stale:</b> trails SPY by 17% over 6 months, down 8% in 6 months, below its 200-day average, 50-day average under the 200-day. Sell all, frees $2,904. Selling realizes a $496 loss (wash-sale rule: no rebuy within 30 days to keep the loss)."},
     {"quant": "rev", "side": "SELL", "sym": "ETH", "qty": 0.6, "conf": 0.55, "thesis": "<b>Stale:</b> trails BTC by 17% over 6 months, down 7% in 6 months, below its 200-day average, 50-day average under the 200-day. Sell all, frees $1,524. Selling realizes a $226 loss."},
-    {"quant": "earn", "side": "BUY", "sym": "TSLA", "qty": 12, "conf": 0.6, "thesis": "<b>Delivery beat:</b> Q3 deliveries 6% over consensus. Full size would breach the position limit."}
+    {"quant": "mom", "side": "BUY", "sym": "AVGO", "qty": 7, "conf": 0.55, "thesis": "<b>Momentum leader:</b> #1 of 19 on 12-1 month return (+51%), above its 200-day average. Buy 7 to reach ~5% of the account."},
+    {"quant": "mom", "side": "BUY", "sym": "NVDA", "qty": 8, "conf": 0.55, "thesis": "<b>Momentum leader:</b> #2 of 19 on 12-1 month return (+49%), above its 200-day average. Buy 8 to reach ~5% of the account."},
+    {"quant": "mom", "side": "BUY", "sym": "META", "qty": 2, "conf": 0.55, "thesis": "<b>Momentum leader:</b> #3 of 19 on 12-1 month return (+38%), above its 200-day average. Buy 2 to reach ~5% of the account."},
+    {"quant": "mom", "side": "BUY", "sym": "WMT", "qty": 15, "conf": 0.55, "thesis": "<b>Momentum leader:</b> #4 of 19 on 12-1 month return (+27%), above its 200-day average. Buy 15 to reach ~5% of the account."},
+    {"quant": "mom", "side": "BUY", "sym": "COST", "qty": 1, "conf": 0.55, "thesis": "<b>Momentum leader:</b> #5 of 19 on 12-1 month return (+23%), above its 200-day average. Buy 1 to reach ~5% of the account."}
   ].forEach(o => addOrder(o, true));
-  state.log.unshift({ t: new Date(state.clock), kind: 'veto', text: 'TSLA buy held: position over 10%' });
 
   renderAll(); renderLog();
   setInterval(tick, 2000);
-  setInterval(newSignal, 22000);
 })();
 </script>
 </body>

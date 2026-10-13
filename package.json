@@ -4,10 +4,14 @@
   "private": true,
   "type": "module",
   "description": "Personal automated trading desk: quant signals, approval queue, risk manager, kill switch, broker sync.",
-  "engines": { "node": ">=20" },
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "test": "node --test test/*.test.js",
     "sync": "node scripts/sync.js",
-    "review": "node scripts/review.js"
+    "review": "node scripts/review.js",
+    "quants": "node scripts/quants.js",
+    "grade": "node scripts/grade.js"
   }
 }
