@@ -107,26 +107,38 @@ export function createAlpacaBroker({
       return { symbol, bid: q.bp, ask: q.ap, last: (q.bp + q.ap) / 2, at: q.t };
     },
 
-    // Daily closes, oldest first, for roughly the last `days` calendar days.
+    // Daily bars since `start` (YYYY-MM-DD), oldest first: [{ date, c }].
     // Stocks use the free IEX feed and split/dividend-adjusted prices.
-    async getBars(symbol, days = 400) {
-      const start = new Date(Date.now() - days * 864e5).toISOString().slice(0, 10);
-      const closes = [];
+    async getDailyBars(symbol, start) {
+      const out = [];
       let token = null;
       do {
         const page = token ? `&page_token=${encodeURIComponent(token)}` : '';
+        let rows;
         if (isCrypto(symbol)) {
           const pair = toPair(symbol);
           const d = await call(`${DATA}/v1beta3/crypto/us/bars?symbols=${encodeURIComponent(pair)}&timeframe=1Day&start=${start}&limit=1000${page}`);
-          for (const b of d.bars?.[pair] || []) closes.push(b.c);
+          rows = d.bars?.[pair] || [];
           token = d.next_page_token;
         } else {
           const d = await call(`${DATA}/v2/stocks/${encodeURIComponent(symbol)}/bars?timeframe=1Day&start=${start}&limit=1000&adjustment=all&feed=iex${page}`);
-          for (const b of d.bars || []) closes.push(b.c);
+          rows = d.bars || [];
           token = d.next_page_token;
         }
+        for (const b of rows) out.push({ date: b.t.slice(0, 10), c: b.c });
       } while (token);
-      return closes;
+      return out;
+    },
+
+    // Daily closes, oldest first, for roughly the last `days` calendar days.
+    async getBars(symbol, days = 400) {
+      const start = new Date(Date.now() - days * 864e5).toISOString().slice(0, 10);
+      return (await this.getDailyBars(symbol, start)).map(b => b.c);
+    },
+
+    // Closes for trading days strictly after `date`. Used to grade signals.
+    async closesAfter(symbol, date) {
+      return (await this.getDailyBars(symbol, date)).filter(b => b.date > date).map(b => b.c);
     },
 
     // Limit orders only. Stocks are day orders; crypto is good-til-cancelled (Alpaca's rule).

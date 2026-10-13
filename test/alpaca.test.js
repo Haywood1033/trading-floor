@@ -110,3 +110,13 @@ test('API errors carry status and message', async () => {
   const b = make();
   await assert.rejects(b.getQuote('ZZZZ'), err => err.status === 404 && /no route/.test(err.message));
 });
+
+test('daily bars carry dates, and closesAfter keeps only later days', async () => {
+  const fetchImpl = fakeFetch({
+    'GET /v2/stocks/SPY/bars': { bars: [{ t: '2026-01-02T05:00:00Z', c: 100 }, { t: '2026-01-05T05:00:00Z', c: 101 }, { t: '2026-01-06T05:00:00Z', c: 102 }], next_page_token: null }
+  });
+  const b = createAlpacaBroker({ keyId: 'k', secretKey: 's', fetchImpl });
+  assert.deepEqual(await b.getBars('SPY'), [100, 101, 102]);
+  assert.deepEqual(await b.closesAfter('SPY', '2026-01-02'), [101, 102]);
+  assert.match(fetchImpl.calls[0].url, /feed=iex/);
+});
