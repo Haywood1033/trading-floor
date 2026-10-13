@@ -107,6 +107,28 @@ export function createAlpacaBroker({
       return { symbol, bid: q.bp, ask: q.ap, last: (q.bp + q.ap) / 2, at: q.t };
     },
 
+    // Daily closes, oldest first, for roughly the last `days` calendar days.
+    // Stocks use the free IEX feed and split/dividend-adjusted prices.
+    async getBars(symbol, days = 400) {
+      const start = new Date(Date.now() - days * 864e5).toISOString().slice(0, 10);
+      const closes = [];
+      let token = null;
+      do {
+        const page = token ? `&page_token=${encodeURIComponent(token)}` : '';
+        if (isCrypto(symbol)) {
+          const pair = toPair(symbol);
+          const d = await call(`${DATA}/v1beta3/crypto/us/bars?symbols=${encodeURIComponent(pair)}&timeframe=1Day&start=${start}&limit=1000${page}`);
+          for (const b of d.bars?.[pair] || []) closes.push(b.c);
+          token = d.next_page_token;
+        } else {
+          const d = await call(`${DATA}/v2/stocks/${encodeURIComponent(symbol)}/bars?timeframe=1Day&start=${start}&limit=1000&adjustment=all&feed=iex${page}`);
+          for (const b of d.bars || []) closes.push(b.c);
+          token = d.next_page_token;
+        }
+      } while (token);
+      return closes;
+    },
+
     // Limit orders only. Stocks are day orders; crypto is good-til-cancelled (Alpaca's rule).
     async placeOrder(order) {
       if (readOnly) throw new ReadOnlyError(this.name);
