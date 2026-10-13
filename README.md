@@ -72,5 +72,10 @@ Run tests with `npm test` (Node 20+, no dependencies).
 
 ## Setup
 
-Set `ALPACA_KEY_ID` and `ALPACA_SECRET_KEY` (paper keys from the Alpaca dashboard) in the
-environment, never in the repo. Then `npm run sync`.
+Alpaca paper keys, never in the repo. Either:
+- **Claude cloud environment (preferred):** add a network secret for `paper-api.alpaca.markets`
+  and `data.alpaca.markets` with two custom headers, `APCA-API-KEY-ID` and `APCA-API-SECRET-KEY`
+  (no prefix). The code never sees the keys.
+- **Anywhere else:** set `ALPACA_KEY_ID` and `ALPACA_SECRET_KEY` as environment variables.
+
+Then `npm run sync`.

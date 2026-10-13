@@ -1,7 +1,11 @@
 // Alpaca adapter (stocks + crypto). Paper by default; live needs { live: true } explicitly.
 // Read-only by default: placeOrder throws until { readOnly: false } is passed.
 //
-// Keys come from ALPACA_KEY_ID / ALPACA_SECRET_KEY. Never commit them.
+// Keys: either ALPACA_KEY_ID / ALPACA_SECRET_KEY in the environment, or (preferred in Claude
+// cloud sessions) a network secret that injects the APCA-API-KEY-ID and APCA-API-SECRET-KEY
+// headers for paper-api.alpaca.markets and data.alpaca.markets, so the code never sees them.
+// With no env keys, requests go out without auth headers and the network secret adds them.
+// Never commit keys.
 
 import { ReadOnlyError } from './adapter.js';
 import { sectorOf } from '../core/sectors.js';
@@ -22,7 +26,7 @@ export function createAlpacaBroker({
   cryptoSymbols = ['BTC', 'ETH', 'SOL', 'DOGE', 'AVAX', 'LTC', 'LINK'],
   fetchImpl = globalThis.fetch
 } = {}) {
-  if (!keyId || !secretKey) throw new Error('Alpaca keys missing: set ALPACA_KEY_ID and ALPACA_SECRET_KEY');
+  const envKeys = !!(keyId && secretKey);
   const base = live ? TRADING.live : TRADING.paper;
   const isCrypto = sym => cryptoSymbols.includes(sym);
 
@@ -30,16 +34,20 @@ export function createAlpacaBroker({
     const res = await fetchImpl(url, {
       method,
       headers: {
-        'APCA-API-KEY-ID': keyId,
-        'APCA-API-SECRET-KEY': secretKey,
+        ...(envKeys ? { 'APCA-API-KEY-ID': keyId, 'APCA-API-SECRET-KEY': secretKey } : {}),
         ...(body ? { 'Content-Type': 'application/json' } : {})
       },
       body: body ? JSON.stringify(body) : undefined
     });
     const text = await res.text();
-    const data = text ? JSON.parse(text) : null;
+    let data = null;
+    try { data = text ? JSON.parse(text) : null; } catch { /* non-JSON error body */ }
     if (!res.ok) {
-      const err = new Error(`Alpaca ${method} ${new URL(url).pathname} failed (${res.status}): ${data?.message || text}`);
+      const hint = res.status === 401 || res.status === 403
+        ? (envKeys ? ' Check ALPACA_KEY_ID / ALPACA_SECRET_KEY are paper keys.'
+                   : ' No env keys set: check the Alpaca network secret covers this host and uses the APCA-API-KEY-ID / APCA-API-SECRET-KEY headers.')
+        : '';
+      const err = new Error(`Alpaca ${method} ${new URL(url).pathname} failed (${res.status}): ${data?.message || text}${hint}`);
       err.status = res.status;
       throw err;
     }
@@ -50,6 +58,7 @@ export function createAlpacaBroker({
     name: live ? 'alpaca-live' : 'alpaca-paper',
     readOnly,
     live,
+    auth: envKeys ? 'env' : 'network-secret',
 
     async getClock() {
       const c = await call(`${base}/v2/clock`);

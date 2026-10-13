@@ -10,6 +10,7 @@ const usd = v => '$' + v.toLocaleString('en-US', { maximumFractionDigits: 2 });
 const pct = v => (v * 100).toFixed(1) + '%';
 
 const broker = createAlpacaBroker({ readOnly: true });
+console.log(`auth: ${broker.auth}`);
 const [clock, snap] = await Promise.all([broker.getClock(), snapshotFrom(broker)]);
 const s = summarize(snap);
 const day = s.equity / snap.startOfDayEquity - 1;

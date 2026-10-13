@@ -36,8 +36,23 @@ test('implements the adapter interface and defaults to paper + read-only', () =>
   assert.equal(b.readOnly, true);
 });
 
-test('refuses to start without keys', () => {
-  assert.throws(() => createAlpacaBroker({ keyId: '', secretKey: '' }), /keys missing/);
+test('without env keys, sends no auth headers so the network secret can inject them', async () => {
+  const fetchImpl = fakeFetch(ROUTES);
+  const b = createAlpacaBroker({ keyId: '', secretKey: '', fetchImpl });
+  assert.equal(b.auth, 'network-secret');
+  await b.getAccount();
+  assert.equal(fetchImpl.calls[0].headers['APCA-API-KEY-ID'], undefined);
+});
+
+test('with env keys, sends them as Alpaca headers', async () => {
+  const fetchImpl = fakeFetch(ROUTES);
+  await createAlpacaBroker({ keyId: 'k', secretKey: 's', fetchImpl }).getAccount();
+  assert.equal(fetchImpl.calls[0].headers['APCA-API-KEY-ID'], 'k');
+});
+
+test('auth failures explain what to check', async () => {
+  const fetchImpl = async () => ({ ok: false, status: 403, text: async () => 'forbidden' });
+  await assert.rejects(createAlpacaBroker({ keyId: '', secretKey: '', fetchImpl }).getAccount(), /network secret/);
 });
 
 test('maps account and positions, normalising crypto symbols and sectors', async () => {
