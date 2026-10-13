@@ -1,3 +1,8 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Trading Floor</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -36,6 +41,8 @@
 }
 
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { margin: 0; }
 body { background: var(--bg); color: var(--fg); font-family: var(--font-body); font-size: 14px; line-height: 1.45; }
 .wrap { padding-inline: 16px; padding-block: 12px 32px; max-width: 1440px; margin-inline: auto; display: grid; gap: 12px; }
 .num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
@@ -85,7 +92,7 @@ th { text-align: left; font-weight: 500; color: var(--muted); font-size: 11px; l
 td { padding: 6px 14px; border-top: 1px solid var(--line); vertical-align: middle; }
 td.r, th.r { text-align: right; }
 .sym { font-weight: 600; font-family: var(--font-mono); }
-.chip { display: inline-block; font-size: 10px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; padding: 1px 6px; border-radius: 3px; border: 1px solid currentColor; margin-left: 6px; vertical-align: 1px; }
+.chip { display: inline-block; white-space: nowrap; font-size: 10px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; padding: 1px 6px; border-radius: 3px; border: 1px solid currentColor; margin-left: 6px; vertical-align: 1px; }
 .chip.stale { color: var(--warn); }
 .chip.over { color: var(--down); }
 .chip.crypto { color: var(--muted); }
@@ -122,8 +129,8 @@ td.r, th.r { text-align: right; }
 .gauge:first-of-type { border-top: 0; }
 .gtop { display: flex; justify-content: space-between; gap: 8px; font-size: 13px; }
 .track { position: relative; height: 6px; background: var(--panel-2); border-radius: 3px; border: 1px solid var(--line); }
-.fill { position: absolute; inset: 0 auto 0 0; border-radius: 3px; background: var(--up); }
-.fill.warn { background: var(--warn); } .fill.bad { background: var(--down); }
+.gfill { position: absolute; inset: 0 auto 0 0; border-radius: 3px; background: var(--up); }
+.gfill.warn { background: var(--warn); } .gfill.bad { background: var(--down); }
 .gnote { font-size: 11px; color: var(--muted); }
 
 /* Quant bench */
@@ -154,6 +161,8 @@ td.r, th.r { text-align: right; }
 .modal p { margin: 0; color: var(--muted); }
 .btn.danger { background: var(--halt); border-color: var(--halt); color: #fff; font-weight: 700; }
 </style>
+</head>
+<body>
 
 <div class="wrap">
   <div class="sample"><b>Mockup</b> Sample portfolio and simulated prices. Portfolio reviewer orders come from the real quant code run on sample data. Nothing here is connected to a broker.</div>
@@ -446,7 +455,7 @@ td.r, th.r { text-align: right; }
     const w = Math.max(0, Math.min(1, ratio)) * 100;
     const lvl = ratio >= 1 ? 'bad' : ratio >= 0.85 ? 'warn' : '';
     return `<div class="gauge"><div class="gtop"><span>${label}</span><span class="num">${fmt(cur)} / ${fmt(limit)}</span></div>
-      <div class="track"><div class="fill ${lvl}" style="width:${w}%"></div></div>${note ? `<div class="gnote">${note}</div>` : ''}</div>`;
+      <div class="track"><div class="gfill ${lvl}" style="width:${w}%"></div></div>${note ? `<div class="gnote">${note}</div>` : ''}</div>`;
   }
   function renderRisk() {
     const t = totals();
@@ -571,7 +580,7 @@ td.r, th.r { text-align: right; }
     {"quant": "rev", "side": "SELL", "sym": "INTC", "qty": 95, "conf": 0.6, "thesis": "<b>Stale:</b> trails SPY by 24% over 6 months, down 15% in 6 months, below its 200-day average, 50-day average under the 200-day, 22% off its 52-week high. Sell all, frees $2,100. Selling realizes a $1,201 loss (wash-sale rule: no rebuy within 30 days to keep the loss)."},
     {"quant": "mom", "side": "BUY", "sym": "NVDA", "qty": 10, "conf": 0.71, "thesis": "<b>Momentum + earnings drift agree:</b> top-decile 12-1 month return and a beat-and-raise quarter."},
     {"quant": "rev", "side": "SELL", "sym": "F", "qty": 220, "conf": 0.55, "thesis": "<b>Stale:</b> trails SPY by 18% over 6 months, down 9% in 6 months, below its 200-day average, 50-day average under the 200-day. Sell all, frees $2,387. Selling realizes a $253 loss (wash-sale rule: no rebuy within 30 days to keep the loss)."},
-    {"quant": "rev", "side": "SELL", "sym": "T", "qty": 14, "conf": 0.6, "thesis": "<b>Over the 10% position limit at 10.</b>7%. Trim 14 to get back under. Also trails SPY by 6% over 6 months."},
+    {"quant": "rev", "side": "SELL", "sym": "T", "qty": 14, "conf": 0.6, "thesis": "<b>Over the 10% position limit</b> at 10.7%. Trim 14 to get back under. Also trails SPY by 6% over 6 months."},
     {"quant": "rev", "side": "SELL", "sym": "DIS", "qty": 18, "conf": 0.55, "thesis": "<b>Stale:</b> trails SPY by 18% over 6 months, down 9% in 6 months, below its 200-day average, 50-day average under the 200-day. Sell all, frees $1,733. Selling realizes a $247 loss (wash-sale rule: no rebuy within 30 days to keep the loss)."},
     {"quant": "rev", "side": "SELL", "sym": "PFE", "qty": 110, "conf": 0.55, "thesis": "<b>Stale:</b> trails SPY by 17% over 6 months, down 8% in 6 months, below its 200-day average, 50-day average under the 200-day. Sell all, frees $2,904. Selling realizes a $496 loss (wash-sale rule: no rebuy within 30 days to keep the loss)."},
     {"quant": "rev", "side": "SELL", "sym": "ETH", "qty": 0.6, "conf": 0.55, "thesis": "<b>Stale:</b> trails BTC by 17% over 6 months, down 7% in 6 months, below its 200-day average, 50-day average under the 200-day. Sell all, frees $1,524. Selling realizes a $226 loss."},
@@ -584,3 +593,5 @@ td.r, th.r { text-align: right; }
   setInterval(newSignal, 22000);
 })();
 </script>
+</body>
+</html>
