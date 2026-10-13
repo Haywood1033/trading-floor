@@ -1,0 +1,582 @@
+<title>Trading Floor</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: one-screen desk. Header bar, then a grid of desks: portfolio | approvals | risk, with quant bench + activity log beneath. Dark-first. */
+:root {
+  --bg: #0e1315;
+  --panel: #151c1f;
+  --panel-2: #1b2427;
+  --line: #263236;
+  --fg: #e3e9ea;
+  --muted: #8b9b9f;
+  --accent: #d6a04a;
+  --accent-ink: #1a1306;
+  --up: #3fbf86;
+  --down: #e8665f;
+  --warn: #e88a3c;
+  --halt: #b8322c;
+  --font-display: "Barlow Condensed", "Arial Narrow", system-ui, sans-serif;
+  --font-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --bg: #eef2f1; --panel: #ffffff; --panel-2: #f5f8f7; --line: #d3dcdb; --fg: #132024; --muted: #586a6e;
+    --accent: #9a640e; --accent-ink: #ffffff; --up: #0f8556; --down: #c2382f; --warn: #b8600c; --halt: #b22a24;
+    color-scheme: light;
+  }
+}
+:root[data-theme="light"] {
+  --bg: #eef2f1; --panel: #ffffff; --panel-2: #f5f8f7; --line: #d3dcdb; --fg: #132024; --muted: #586a6e;
+  --accent: #9a640e; --accent-ink: #ffffff; --up: #0f8556; --down: #c2382f; --warn: #b8600c; --halt: #b22a24;
+  color-scheme: light;
+}
+
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--fg); font-family: var(--font-body); font-size: 14px; line-height: 1.45; }
+.wrap { padding-inline: 16px; padding-block: 12px 32px; max-width: 1440px; margin-inline: auto; display: grid; gap: 12px; }
+.num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.up { color: var(--up); } .down { color: var(--down); } .muted { color: var(--muted); }
+button { font: inherit; color: inherit; cursor: pointer; }
+button:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+button:disabled { cursor: not-allowed; opacity: .45; }
+
+/* Sample banner */
+.sample { font-size: 12px; color: var(--muted); display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.sample b { color: var(--accent); font-weight: 600; letter-spacing: .06em; text-transform: uppercase; font-size: 11px; }
+
+/* Header */
+header.bar { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 20px; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 10px 14px; }
+.brand { font-family: var(--font-display); font-weight: 700; font-size: 22px; letter-spacing: .08em; text-transform: uppercase; }
+.brand span { color: var(--accent); }
+.status { display: flex; gap: 16px; flex-wrap: wrap; align-items: center; font-size: 13px; }
+.dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--up); margin-right: 6px; vertical-align: 1px; }
+.dot.off { background: var(--down); }
+.spacer { flex: 1; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 5px; overflow: hidden; }
+.seg button { background: transparent; border: 0; padding: 6px 12px; font-size: 12px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
+.seg button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
+.kill { background: var(--halt); color: #fff; border: 0; border-radius: 5px; padding: 7px 14px; font-weight: 700; letter-spacing: .08em; font-size: 12px; text-transform: uppercase; display: inline-flex; gap: 8px; align-items: center; }
+.kill::before { content: ""; width: 10px; height: 10px; background: #fff; border-radius: 1px; }
+.halted { background: var(--halt); color: #fff; border-radius: 6px; padding: 10px 14px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; font-weight: 600; }
+.halted button { background: #fff; color: var(--halt); border: 0; border-radius: 4px; padding: 5px 12px; font-weight: 700; }
+
+/* Desk grid */
+.desk { display: grid; gap: 12px; grid-template-columns: 290px minmax(0, 1fr) 300px; align-items: start; }
+.lower { display: grid; gap: 12px; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); align-items: start; }
+@media (max-width: 1100px) { .desk { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } .desk .approvals { grid-column: 1 / -1; order: -1; } }
+@media (max-width: 760px) { .desk, .lower { grid-template-columns: minmax(0, 1fr); } }
+
+section.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; min-width: 0; }
+.panel > h2 { margin: 0; padding: 10px 14px; border-bottom: 1px solid var(--line); font-family: var(--font-display); font-weight: 600; font-size: 15px; letter-spacing: .1em; text-transform: uppercase; display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.panel > h2 small { font-family: var(--font-body); font-size: 12px; letter-spacing: 0; text-transform: none; color: var(--muted); font-weight: 400; }
+.pad { padding: 12px 14px; }
+
+/* Portfolio */
+.equity { font-family: var(--font-mono); font-size: 28px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.kv { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; font-size: 13px; margin-top: 8px; }
+.kv dt { color: var(--muted); } .kv dd { margin: 0; text-align: right; }
+svg.spark { width: 100%; height: 64px; display: block; margin-top: 10px; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th { text-align: left; font-weight: 500; color: var(--muted); font-size: 11px; letter-spacing: .06em; text-transform: uppercase; padding: 6px 14px 4px; }
+td { padding: 6px 14px; border-top: 1px solid var(--line); vertical-align: middle; }
+td.r, th.r { text-align: right; }
+.sym { font-weight: 600; font-family: var(--font-mono); }
+.chip { display: inline-block; font-size: 10px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; padding: 1px 6px; border-radius: 3px; border: 1px solid currentColor; margin-left: 6px; vertical-align: 1px; }
+.chip.stale { color: var(--warn); }
+.chip.over { color: var(--down); }
+.chip.crypto { color: var(--muted); }
+
+/* Approvals */
+.queue { display: grid; gap: 0; }
+.order { padding: 12px 14px; border-top: 1px solid var(--line); display: grid; gap: 8px; border-left: 3px solid transparent; }
+.order:first-child { border-top: 0; }
+.order.blocked { border-left-color: var(--down); }
+.order.ready { border-left-color: var(--up); }
+.order.fresh { animation: flash 1.2s ease-out; }
+@keyframes flash { from { background: var(--panel-2); } to { background: transparent; } }
+@media (prefers-reduced-motion: reduce) { .order.fresh { animation: none; } }
+.otop { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: baseline; }
+.side { font-family: var(--font-display); font-weight: 700; font-size: 16px; letter-spacing: .08em; }
+.side.buy { color: var(--up); } .side.sell { color: var(--down); }
+.otop .sym { font-size: 16px; }
+.qty { display: inline-flex; align-items: center; gap: 2px; }
+.qty button { width: 22px; height: 22px; border: 1px solid var(--line); background: var(--panel-2); border-radius: 3px; line-height: 1; padding: 0; }
+.qty span { min-width: 4ch; text-align: center; }
+.thesis { font-size: 13px; color: var(--muted); max-width: 70ch; }
+.thesis b { color: var(--fg); font-weight: 600; }
+.checks { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 12px; }
+.checks .ok { color: var(--up); } .checks .bad { color: var(--down); font-weight: 600; }
+.actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.btn { border: 1px solid var(--line); background: var(--panel-2); border-radius: 4px; padding: 5px 12px; font-size: 13px; font-weight: 500; }
+.btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 600; }
+.btn.ghost { background: transparent; }
+.empty { padding: 28px 14px; text-align: center; color: var(--muted); }
+.autonote { padding: 8px 14px; font-size: 12px; color: var(--muted); border-bottom: 1px solid var(--line); background: var(--panel-2); }
+
+/* Risk */
+.gauge { display: grid; gap: 4px; padding: 9px 14px; border-top: 1px solid var(--line); }
+.gauge:first-of-type { border-top: 0; }
+.gtop { display: flex; justify-content: space-between; gap: 8px; font-size: 13px; }
+.track { position: relative; height: 6px; background: var(--panel-2); border-radius: 3px; border: 1px solid var(--line); }
+.fill { position: absolute; inset: 0 auto 0 0; border-radius: 3px; background: var(--up); }
+.fill.warn { background: var(--warn); } .fill.bad { background: var(--down); }
+.gnote { font-size: 11px; color: var(--muted); }
+
+/* Quant bench */
+.tier { font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; padding: 2px 7px; border-radius: 3px; white-space: nowrap; }
+.tier.elite { background: var(--accent); color: var(--accent-ink); }
+.tier.allstar { border: 1px solid var(--accent); color: var(--accent); }
+.tier.value { border: 1px solid var(--muted); color: var(--muted); }
+.tier.unproven { border: 1px dashed var(--muted); color: var(--muted); }
+.hitbar { display: inline-block; width: 60px; height: 5px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 3px; position: relative; vertical-align: middle; margin-right: 6px; }
+.hitbar i { position: absolute; inset: 0 auto 0 0; background: var(--fg); border-radius: 3px; opacity: .7; }
+.hitbar::after { content: ""; position: absolute; left: 50%; top: -3px; bottom: -3px; width: 1px; background: var(--muted); }
+.seg.small button { padding: 3px 8px; font-size: 10px; }
+.tablewrap { overflow-x: auto; }
+.qdesc { font-size: 11px; color: var(--muted); }
+
+/* Log */
+.log { list-style: none; margin: 0; padding: 0; max-height: 360px; overflow-y: auto; font-size: 12.5px; }
+.log li { display: grid; grid-template-columns: 62px 58px minmax(0, 1fr); gap: 8px; padding: 6px 14px; border-top: 1px solid var(--line); }
+.log li:first-child { border-top: 0; }
+.log time { color: var(--muted); font-family: var(--font-mono); font-size: 11.5px; }
+.tag { font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+.tag.fill { color: var(--up); } .tag.veto, .tag.halt { color: var(--down); } .tag.signal { color: var(--accent); } .tag.paper, .tag.reject, .tag.system { color: var(--muted); }
+
+/* Modal */
+.modal { position: fixed; inset: 0; background: rgba(0,0,0,.55); display: grid; place-items: center; padding: 16px; z-index: 10; }
+.modal .box { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 20px; max-width: 420px; display: grid; gap: 12px; }
+.modal h3 { margin: 0; font-family: var(--font-display); font-size: 22px; letter-spacing: .06em; text-transform: uppercase; }
+.modal p { margin: 0; color: var(--muted); }
+.btn.danger { background: var(--halt); border-color: var(--halt); color: #fff; font-weight: 700; }
+</style>
+
+<div class="wrap">
+  <div class="sample"><b>Mockup</b> Sample portfolio and simulated prices. Nothing here is connected to a broker.</div>
+
+  <header class="bar">
+    <div class="brand">Trading <span>Floor</span></div>
+    <div class="status">
+      <span><span class="dot" id="mktDot"></span>NYSE <span id="mktState">Open</span> · <span class="num" id="clock">2:14:00 PM</span> ET</span>
+      <span class="muted">Stocks: Alpaca (paper) · Crypto: Robinhood</span>
+    </div>
+    <div class="spacer"></div>
+    <div class="seg" role="group" aria-label="Execution mode">
+      <button id="modeApproval" aria-pressed="true">Approve each trade</button>
+      <button id="modeAuto" aria-pressed="false">Auto within limits</button>
+    </div>
+    <button class="kill" id="killBtn">Kill switch</button>
+  </header>
+
+  <div class="halted" id="haltBar" hidden>
+    <span>Trading halted at <span id="haltTime"></span>. Pending orders cancelled and every quant paused.</span>
+    <div class="spacer"></div>
+    <button id="resumeBtn">Resume trading</button>
+  </div>
+
+  <div class="desk">
+    <section class="panel">
+      <h2>Portfolio <small>live sync</small></h2>
+      <div class="pad">
+        <div class="equity" id="equity">$0</div>
+        <div class="num" id="dayChg"></div>
+        <svg class="spark" id="spark" viewBox="0 0 300 64" preserveAspectRatio="none" aria-label="Equity today"></svg>
+        <dl class="kv">
+          <dt>Cash</dt><dd class="num" id="cash"></dd>
+          <dt>Stocks</dt><dd class="num" id="stockVal"></dd>
+          <dt>Crypto</dt><dd class="num" id="cryptoVal"></dd>
+        </dl>
+      </div>
+      <table>
+        <thead><tr><th>Holding</th><th class="r">Value</th><th class="r">Day</th><th class="r">6 mo</th></tr></thead>
+        <tbody id="holdings"></tbody>
+      </table>
+    </section>
+
+    <section class="panel approvals">
+      <h2>Pending approvals <small id="queueCount"></small></h2>
+      <div class="autonote" id="autoNote" hidden>Auto mode: orders that pass every risk check, come from a proven quant, and are under $1,500 fill on their own. Everything else waits here for you.</div>
+      <div class="queue" id="queue"></div>
+    </section>
+
+    <section class="panel">
+      <h2>Risk desk <small>hard limits</small></h2>
+      <div id="risk"></div>
+    </section>
+  </div>
+
+  <div class="lower">
+    <section class="panel">
+      <h2>Quant bench <small>hit rate vs 50% coin flip</small></h2>
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>Quant</th><th>Track record</th><th>Tier</th><th class="r">Mode</th></tr></thead>
+          <tbody id="bench"></tbody>
+        </table>
+      </div>
+    </section>
+    <section class="panel">
+      <h2>Activity log <small>audit trail</small></h2>
+      <ul class="log" id="log"></ul>
+    </section>
+  </div>
+</div>
+
+<div class="modal" id="killModal" hidden>
+  <div class="box" role="dialog" aria-modal="true" aria-labelledby="killTitle">
+    <h3 id="killTitle">Halt all trading?</h3>
+    <p>This cancels every pending order, pauses every quant, and blocks new orders until you resume. Open positions are not sold.</p>
+    <div class="actions">
+      <button class="btn danger" id="killConfirm">Halt trading</button>
+      <button class="btn" id="killCancel">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  const LIMITS = { position: 0.10, crypto: 0.20, tech: 0.40, cashFloor: 0.05, dayLoss: -0.02, autoMax: 1500, dayTrades: 3 };
+  const META = {
+    AAPL: { sector: 'Tech', type: 'stock' }, MSFT: { sector: 'Tech', type: 'stock' }, INTC: { sector: 'Tech', type: 'stock' },
+    NVDA: { sector: 'Tech', type: 'stock' }, TSLA: { sector: 'Auto', type: 'stock' }, F: { sector: 'Auto', type: 'stock' },
+    T: { sector: 'Telecom', type: 'stock' }, DIS: { sector: 'Media', type: 'stock' }, PFE: { sector: 'Health', type: 'stock' },
+    XLE: { sector: 'Energy', type: 'stock' }, BTC: { sector: 'Crypto', type: 'crypto' }, ETH: { sector: 'Crypto', type: 'crypto' },
+    SOL: { sector: 'Crypto', type: 'crypto' }
+  };
+  const px = { AAPL: 228.40, MSFT: 431.10, INTC: 22.10, NVDA: 138.40, TSLA: 251.00, F: 10.85, T: 21.60, DIS: 96.30, PFE: 26.40, XLE: 91.20, BTC: 63800, ETH: 2540, SOL: 148.0 };
+  const prev = { AAPL: 226.90, MSFT: 433.00, INTC: 22.25, NVDA: 135.10, TSLA: 247.80, F: 10.88, T: 21.52, DIS: 96.70, PFE: 26.55, XLE: 90.40, BTC: 62900, ETH: 2512, SOL: 144.5 };
+  const r6m = { AAPL: 0.071, MSFT: 0.044, INTC: -0.182, F: -0.094, T: 0.031, DIS: -0.067, PFE: -0.112, NVDA: 0.21, BTC: 0.09, ETH: -0.04, SOL: 0.12, TSLA: 0.15, XLE: 0.05 };
+
+  const state = {
+    cash: 4700, startEquity: 0, mode: 'approval', halted: false, dayTrades: 1,
+    holdings: { AAPL: 8, MSFT: 4, INTC: 95, F: 220, T: 120, DIS: 18, PFE: 110, BTC: 0.035, ETH: 0.6, SOL: 4 },
+    equityPts: [], orders: [], log: [], seq: 1,
+    clock: new Date(2026, 9, 12, 14, 14, 0)
+  };
+
+  const quants = [
+    { id: 'mom', name: 'Momentum', desc: '12-1 month trend, top decile', mode: 'live', hit: 0.58, n: 112, tier: 'elite' },
+    { id: 'earn', name: 'Earnings drift', desc: 'Post-earnings surprise follow-through', mode: 'live', hit: 0.56, n: 64, tier: 'allstar' },
+    { id: 'rev', name: 'Portfolio reviewer', desc: 'Flags stagnant holdings vs sector and SPY', mode: 'live', hit: 0.61, n: 31, tier: 'allstar' },
+    { id: 'mr', name: 'Mean reversion', desc: 'Short-term oversold bounces', mode: 'paper', hit: 0.51, n: 40, tier: 'unproven' },
+    { id: 'cry', name: 'Crypto trend', desc: 'BTC/ETH/SOL trend filter, 4h bars', mode: 'paper', hit: 0.55, n: 23, tier: 'value' }
+  ];
+  const TIER_LABEL = { elite: 'Elite', allstar: 'All-Star', value: 'Value', unproven: 'Unproven' };
+  const quantById = id => quants.find(q => q.id === id);
+
+  const $ = id => document.getElementById(id);
+  const usd = (v, d = 0) => (v < 0 ? '-' : '') + '$' + Math.abs(v).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d });
+  const pct = (v, d = 1) => (v > 0 ? '+' : '') + (v * 100).toFixed(d) + '%';
+  const cls = v => v > 0 ? 'up' : v < 0 ? 'down' : 'muted';
+  const fmtQty = (sym, q) => META[sym].type === 'crypto' ? (+q.toFixed(4)).toString() : q.toString();
+  const timeStr = d => d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', second: '2-digit' });
+  const shortTime = d => d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+
+  function value(sym, qty = state.holdings[sym] || 0) { return qty * px[sym]; }
+  function totals(h = state.holdings, cash = state.cash) {
+    let stocks = 0, crypto = 0, tech = 0;
+    for (const s in h) {
+      const v = h[s] * px[s];
+      if (META[s].type === 'crypto') crypto += v; else stocks += v;
+      if (META[s].sector === 'Tech') tech += v;
+    }
+    return { stocks, crypto, tech, cash, equity: stocks + crypto + cash };
+  }
+
+  // ---- Risk checks: run on the portfolio as it would look after the order fills
+  function checks(o) {
+    const h = Object.assign({}, state.holdings);
+    const val = o.qty * px[o.sym];
+    const sign = o.side === 'BUY' ? 1 : -1;
+    h[o.sym] = Math.max(0, (h[o.sym] || 0) + sign * o.qty);
+    const cash = state.cash - sign * val;
+    const t = totals(h, cash);
+    const out = [];
+    if (state.halted) out.push({ ok: false, label: 'Trading halted' });
+    if (o.side === 'SELL' && o.qty > (state.holdings[o.sym] || 0) + 1e-9) out.push({ ok: false, label: 'Not enough shares' });
+    if (o.side === 'BUY') {
+      const posPct = h[o.sym] * px[o.sym] / t.equity;
+      out.push({ ok: posPct <= LIMITS.position, label: 'Position ' + (posPct * 100).toFixed(1) + '% / 10%' });
+      out.push({ ok: cash / t.equity >= LIMITS.cashFloor, label: 'Cash after ' + usd(cash) });
+      if (META[o.sym].sector === 'Tech') out.push({ ok: t.tech / t.equity <= LIMITS.tech, label: 'Tech ' + (t.tech / t.equity * 100).toFixed(0) + '% / 40%' });
+      if (META[o.sym].type === 'crypto') out.push({ ok: t.crypto / t.equity <= LIMITS.crypto, label: 'Crypto ' + (t.crypto / t.equity * 100).toFixed(0) + '% / 20%' });
+      const day = totals().equity / state.startEquity - 1;
+      out.push({ ok: day > LIMITS.dayLoss, label: 'Daily loss cap' });
+    } else {
+      out.push({ ok: true, label: 'Reduces exposure' });
+    }
+    return out;
+  }
+  const passes = o => checks(o).every(c => c.ok);
+  function maxQtyThatFits(o) {
+    const step = META[o.sym].type === 'crypto' ? 0.001 : 1;
+    let q = o.qty;
+    while (q > step && !passes(Object.assign({}, o, { qty: q }))) q = +(q - step).toFixed(4);
+    return passes(Object.assign({}, o, { qty: q })) ? q : 0;
+  }
+
+  // ---- Log
+  function log(kind, text) {
+    state.log.unshift({ t: new Date(state.clock), kind, text });
+    if (state.log.length > 80) state.log.pop();
+    renderLog();
+  }
+  function renderLog() {
+    $('log').innerHTML = state.log.map(e =>
+      `<li><time>${shortTime(e.t)}</time><span class="tag ${e.kind}">${e.kind}</span><span>${e.text}</span></li>`).join('');
+  }
+
+  // ---- Orders
+  function addOrder(o, quiet) {
+    o.id = state.seq++; o.fresh = true;
+    state.orders.push(o);
+    if (!quiet) log('signal', `${quantById(o.quant).name}: ${o.side} ${fmtQty(o.sym, o.qty)} ${o.sym}`);
+    const c = checks(o);
+    if (!c.every(x => x.ok) && !quiet) log('veto', `${o.sym} ${o.side.toLowerCase()} held: ${c.filter(x => !x.ok).map(x => x.label).join(', ')}`);
+    renderQueue();
+    if (state.mode === 'auto') setTimeout(autoRun, 1200);
+  }
+  function execute(o, how) {
+    if (!passes(o)) return;
+    const val = o.qty * px[o.sym];
+    const sign = o.side === 'BUY' ? 1 : -1;
+    state.holdings[o.sym] = +((state.holdings[o.sym] || 0) + sign * o.qty).toFixed(6);
+    if (state.holdings[o.sym] <= 1e-9) delete state.holdings[o.sym];
+    state.cash -= sign * val;
+    const q = quantById(o.quant); q.n += 0; // track record updates once the trade is graded
+    log('fill', `${o.side} ${fmtQty(o.sym, o.qty)} ${o.sym} @ ${usd(px[o.sym], 2)} (${usd(val)})${how === 'auto' ? ', auto' : ', approved by you'}`);
+    removeOrder(o.id);
+  }
+  function removeOrder(id) { state.orders = state.orders.filter(x => x.id !== id); renderAll(); }
+  function autoEligible(o) {
+    const q = quantById(o.quant);
+    return passes(o) && q.tier !== 'unproven' && o.qty * px[o.sym] <= LIMITS.autoMax;
+  }
+  function autoRun() {
+    if (state.mode !== 'auto' || state.halted) return;
+    state.orders.filter(autoEligible).forEach(o => execute(o, 'auto'));
+  }
+
+  function renderQueue() {
+    const q = $('queue');
+    $('queueCount').textContent = state.orders.length ? state.orders.length + ' waiting' : '';
+    if (!state.orders.length) {
+      q.innerHTML = `<div class="empty">${state.halted ? 'Trading is halted. New signals are paused.' : 'Nothing waiting. New signals from live quants land here.'}</div>`;
+      return;
+    }
+    q.innerHTML = state.orders.map(o => {
+      const c = checks(o), ok = c.every(x => x.ok), qn = quantById(o.quant);
+      const val = o.qty * px[o.sym];
+      const fit = !ok && o.side === 'BUY' && !state.halted ? maxQtyThatFits(o) : 0;
+      return `<article class="order ${ok ? 'ready' : 'blocked'} ${o.fresh ? 'fresh' : ''}" data-id="${o.id}">
+        <div class="otop">
+          <span class="side ${o.side.toLowerCase()}">${o.side === 'BUY' ? '▲ BUY' : '▼ SELL'}</span>
+          <span class="sym">${o.sym}</span>
+          <span class="qty num"><button data-act="dec" aria-label="Decrease size">−</button><span>${fmtQty(o.sym, o.qty)}</span><button data-act="inc" aria-label="Increase size">+</button></span>
+          <span class="num muted">~${usd(val)}</span>
+          <span class="spacer"></span>
+          <span class="muted" style="font-size:12px">${qn.name} · conf ${Math.round(o.conf * 100)}%</span>
+        </div>
+        <div class="thesis">${o.thesis}</div>
+        <div class="checks">${c.map(x => `<span class="${x.ok ? 'ok' : 'bad'}">${x.ok ? '✓' : '✕'} ${x.label}</span>`).join('')}</div>
+        <div class="actions">
+          <button class="btn primary" data-act="approve" ${ok ? '' : 'disabled'}>Approve</button>
+          ${fit ? `<button class="btn" data-act="fit">Resize to ${fmtQty(o.sym, fit)}</button>` : ''}
+          <button class="btn ghost" data-act="reject">Reject</button>
+        </div>
+      </article>`;
+    }).join('');
+    state.orders.forEach(o => o.fresh = false);
+  }
+  $('queue').addEventListener('click', e => {
+    const b = e.target.closest('button[data-act]'); if (!b) return;
+    const o = state.orders.find(x => x.id === +b.closest('.order').dataset.id); if (!o) return;
+    const step = META[o.sym].type === 'crypto' ? (o.sym === 'BTC' ? 0.001 : o.sym === 'ETH' ? 0.01 : 0.5) : 1;
+    switch (b.dataset.act) {
+      case 'approve': execute(o, 'manual'); break;
+      case 'reject': log('reject', `${o.side} ${fmtQty(o.sym, o.qty)} ${o.sym} rejected by you`); removeOrder(o.id); break;
+      case 'fit': o.qty = maxQtyThatFits(o); log('system', `${o.sym} resized to ${fmtQty(o.sym, o.qty)} to fit limits`); renderQueue(); break;
+      case 'inc': o.qty = +(o.qty + step).toFixed(4); renderQueue(); break;
+      case 'dec': if (o.qty - step > 0) { o.qty = +(o.qty - step).toFixed(4); renderQueue(); } break;
+    }
+  });
+
+  // ---- Portfolio
+  function renderPortfolio() {
+    const t = totals();
+    const day = t.equity - state.startEquity;
+    $('equity').textContent = usd(t.equity, 2);
+    $('dayChg').innerHTML = `<span class="${cls(day)}">${day >= 0 ? '+' : ''}${usd(day, 2)} (${pct(day / state.startEquity, 2)})</span> <span class="muted">today</span>`;
+    $('cash').textContent = usd(t.cash) + ' · ' + (t.cash / t.equity * 100).toFixed(0) + '%';
+    $('stockVal').textContent = usd(t.stocks);
+    $('cryptoVal').textContent = usd(t.crypto);
+    const rows = Object.keys(state.holdings).sort((a, b) => value(b) - value(a));
+    $('holdings').innerHTML = rows.map(s => {
+      const v = value(s), d = px[s] / prev[s] - 1, w = v / t.equity, six = r6m[s] ?? 0;
+      const chips = (META[s].type === 'crypto' ? '<span class="chip crypto">crypto</span>' : '') +
+        (w > LIMITS.position && META[s].type !== 'crypto' ? '<span class="chip over">over 10%</span>' : '') +
+        (six < -0.05 ? '<span class="chip stale">stale</span>' : '');
+      return `<tr><td><span class="sym">${s}</span>${chips}<div class="muted num" style="font-size:11px">${fmtQty(s, state.holdings[s])} · ${(w * 100).toFixed(1)}%</div></td>
+        <td class="r num">${usd(v)}</td><td class="r num ${cls(d)}">${pct(d)}</td><td class="r num ${cls(six)}">${pct(six, 0)}</td></tr>`;
+    }).join('');
+    drawSpark();
+  }
+  function drawSpark() {
+    const pts = state.equityPts, W = 300, H = 64, pad = 4;
+    const lo = Math.min(...pts, state.startEquity), hi = Math.max(...pts, state.startEquity);
+    const y = v => H - pad - (v - lo) / (hi - lo || 1) * (H - pad * 2);
+    const x = i => i / (pts.length - 1) * W;
+    const line = pts.map((v, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join('');
+    const last = pts[pts.length - 1];
+    const col = last >= state.startEquity ? 'var(--up)' : 'var(--down)';
+    $('spark').innerHTML =
+      `<line x1="0" x2="${W}" y1="${y(state.startEquity)}" y2="${y(state.startEquity)}" stroke="var(--muted)" stroke-dasharray="3 3" stroke-width="1" vector-effect="non-scaling-stroke" opacity=".6"/>
+       <path d="${line}L${W},${H}L0,${H}Z" fill="${col}" opacity=".12"/>
+       <path d="${line}" fill="none" stroke="${col}" stroke-width="1.5" vector-effect="non-scaling-stroke"/>
+       <circle cx="${W}" cy="${y(last)}" r="2.5" fill="${col}"/>`;
+  }
+
+  // ---- Risk desk
+  function gauge(label, cur, limit, fmt, note, invert) {
+    const ratio = invert ? cur / limit : cur / limit;
+    const w = Math.max(0, Math.min(1, ratio)) * 100;
+    const lvl = ratio >= 1 ? 'bad' : ratio >= 0.85 ? 'warn' : '';
+    return `<div class="gauge"><div class="gtop"><span>${label}</span><span class="num">${fmt(cur)} / ${fmt(limit)}</span></div>
+      <div class="track"><div class="fill ${lvl}" style="width:${w}%"></div></div>${note ? `<div class="gnote">${note}</div>` : ''}</div>`;
+  }
+  function renderRisk() {
+    const t = totals();
+    const day = t.equity / state.startEquity - 1;
+    const stocks = Object.keys(state.holdings).filter(s => META[s].type === 'stock');
+    const big = stocks.reduce((m, s) => value(s) > value(m) ? s : m, stocks[0]);
+    const p = v => (v * 100).toFixed(1) + '%';
+    $('risk').innerHTML =
+      gauge('Daily loss', Math.max(0, -day), -LIMITS.dayLoss, p, day >= 0 ? `Up ${p(day)} today. New buys stop at −2%.` : 'New buys stop at −2%.') +
+      gauge('Largest position', value(big) / t.equity, LIMITS.position, p, `${big}. Buys that push any stock past 10% are held.`) +
+      gauge('Tech exposure', t.tech / t.equity, LIMITS.tech, p) +
+      gauge('Crypto exposure', t.crypto / t.equity, LIMITS.crypto, p) +
+      gauge('Day trades (5-day)', state.dayTrades, LIMITS.dayTrades, v => v.toString(), 'Pattern day trader limit for accounts under $25k.') +
+      `<div class="gauge"><div class="gtop"><span>Auto-trade size cap</span><span class="num">${usd(LIMITS.autoMax)}</span></div><div class="gnote">Larger orders always wait for your approval.</div></div>`;
+  }
+
+  // ---- Quant bench
+  function renderBench() {
+    $('bench').innerHTML = quants.map(q => `<tr>
+      <td><b>${q.name}</b><div class="qdesc">${q.desc}</div></td>
+      <td class="num"><span class="hitbar"><i style="width:${q.hit * 100}%"></i></span>${(q.hit * 100).toFixed(0)}% <span class="muted">n=${q.n}</span></td>
+      <td><span class="tier ${q.tier}">${TIER_LABEL[q.tier]}</span></td>
+      <td class="r"><div class="seg small" role="group" aria-label="${q.name} mode">${['live', 'paper', 'off'].map(m =>
+        `<button data-q="${q.id}" data-m="${m}" aria-pressed="${q.mode === m}">${m}</button>`).join('')}</div></td></tr>`).join('');
+  }
+  $('bench').addEventListener('click', e => {
+    const b = e.target.closest('button[data-q]'); if (!b) return;
+    const q = quantById(b.dataset.q);
+    if (q.mode === b.dataset.m) return;
+    q.mode = b.dataset.m;
+    log('system', `${q.name} set to ${q.mode}`);
+    renderBench();
+  });
+
+  // ---- Mode + kill switch
+  function setMode(m) {
+    state.mode = m;
+    $('modeApproval').setAttribute('aria-pressed', m === 'approval');
+    $('modeAuto').setAttribute('aria-pressed', m === 'auto');
+    $('autoNote').hidden = m !== 'auto';
+    log('system', m === 'auto' ? 'Switched to auto within limits' : 'Switched to approve each trade');
+    if (m === 'auto') setTimeout(autoRun, 800);
+  }
+  $('modeApproval').onclick = () => state.mode !== 'approval' && setMode('approval');
+  $('modeAuto').onclick = () => state.mode !== 'auto' && setMode('auto');
+  $('killBtn').onclick = () => { $('killModal').hidden = false; $('killConfirm').focus(); };
+  $('killCancel').onclick = () => { $('killModal').hidden = true; };
+  $('killConfirm').onclick = () => {
+    $('killModal').hidden = true;
+    state.halted = true;
+    const n = state.orders.length;
+    state.orders = [];
+    $('haltTime').textContent = shortTime(state.clock);
+    $('haltBar').hidden = false;
+    $('killBtn').disabled = true;
+    log('halt', `Kill switch pressed. ${n} pending order${n === 1 ? '' : 's'} cancelled.`);
+    renderAll();
+  };
+  $('resumeBtn').onclick = () => {
+    state.halted = false;
+    $('haltBar').hidden = true;
+    $('killBtn').disabled = false;
+    log('system', 'Trading resumed');
+    renderAll();
+  };
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') $('killModal').hidden = true; });
+
+  // ---- Simulated market
+  function gauss() { return Math.sqrt(-2 * Math.log(Math.random() || 1e-9)) * Math.cos(2 * Math.PI * Math.random()); }
+  function tick() {
+    for (const s in px) px[s] *= 1 + gauss() * (META[s].type === 'crypto' ? 0.0012 : 0.0005);
+    state.clock = new Date(state.clock.getTime() + 2000);
+    $('clock').textContent = timeStr(state.clock);
+    state.equityPts.push(totals().equity);
+    if (state.equityPts.length > 400) state.equityPts.shift();
+    renderPortfolio(); renderRisk();
+    if (state.orders.length) renderQueue();
+  }
+
+  const IDEAS = [
+    { quant: 'mom', side: 'BUY', sym: 'XLE', qty: 12, conf: 0.64, thesis: '<b>Energy breaking out:</b> 3-month high, sector momentum rank up 4 places this week.' },
+    { quant: 'earn', side: 'BUY', sym: 'MSFT', qty: 2, conf: 0.62, thesis: '<b>Beat and raise:</b> revenue +4% vs consensus, drift historically positive 20 days out.' },
+    { quant: 'rev', side: 'SELL', sym: 'DIS', qty: 18, conf: 0.66, thesis: '<b>Stagnant:</b> −7% over 6 months while media peers are +5%. Frees $1.7k for stronger names.' },
+    { quant: 'mr', side: 'BUY', sym: 'AAPL', qty: 3, conf: 0.53, thesis: '<b>Oversold bounce:</b> RSI(2) under 10 and above 200-day average.' },
+    { quant: 'cry', side: 'BUY', sym: 'ETH', qty: 0.2, conf: 0.57, thesis: '<b>Trend flip:</b> ETH 4h closes above 50-bar average with rising volume.' },
+    { quant: 'mom', side: 'BUY', sym: 'NVDA', qty: 4, conf: 0.69, thesis: '<b>Leadership:</b> top-decile 12-1 month return, new 20-day high.' }
+  ];
+  let ideaIx = 0;
+  function newSignal() {
+    if (state.halted) return;
+    for (let tries = 0; tries < IDEAS.length; tries++) {
+      const idea = IDEAS[ideaIx++ % IDEAS.length];
+      const q = quantById(idea.quant);
+      if (q.mode === 'off') continue;
+      if (q.mode === 'paper') { log('paper', `${q.name}: ${idea.side} ${fmtQty(idea.sym, idea.qty)} ${idea.sym} recorded on paper, not sent`); return; }
+      if (state.orders.some(o => o.sym === idea.sym)) continue;
+      addOrder(Object.assign({}, idea));
+      return;
+    }
+  }
+
+  function renderAll() { renderPortfolio(); renderRisk(); renderQueue(); renderBench(); }
+
+  // ---- Seed
+  state.startEquity = (function () { let e = state.cash; for (const s in state.holdings) e += state.holdings[s] * prev[s]; return e; })();
+  (function seedCurve() {
+    const now = totals().equity, n = 160; let v = state.startEquity; const raw = [];
+    for (let i = 0; i < n; i++) { v += gauss() * 18; raw.push(v); }
+    const drift = (now - raw[n - 1]) / n;
+    state.equityPts = raw.map((r, i) => r + drift * (i + 1));
+  })();
+  const seedLog = [
+    [9, 30, 'system', 'Market open. Portfolio synced: 7 stocks, 3 coins.'],
+    [9, 41, 'fill', 'SELL 0.004 BTC @ $63,120.00 ($252), approved by you'],
+    [10, 5, 'paper', 'Mean reversion: BUY 10 F recorded on paper, not sent'],
+    [11, 22, 'veto', 'AAPL buy held: Tech 42% / 40%'],
+    [12, 48, 'signal', 'Portfolio reviewer flagged 4 stale holdings'],
+    [13, 37, 'paper', 'Crypto trend: BUY 2 SOL recorded on paper, not sent']
+  ];
+  seedLog.forEach(([h, m, k, t]) => state.log.unshift({ t: new Date(2026, 9, 12, h, m), kind: k, text: t }));
+  [
+    { quant: 'rev', side: 'SELL', sym: 'INTC', qty: 95, conf: 0.72, thesis: '<b>Stagnant:</b> −18% over 6 months, below its 200-day average, bottom 10% of tech on relative strength. Sell all.' },
+    { quant: 'mom', side: 'BUY', sym: 'NVDA', qty: 10, conf: 0.71, thesis: '<b>Momentum + earnings drift agree:</b> top-decile 12-1 month return and a beat-and-raise quarter.' },
+    { quant: 'rev', side: 'SELL', sym: 'PFE', qty: 20, conf: 0.68, thesis: '<b>Trim back under 10%:</b> PFE is your largest position and −11% over 6 months.' },
+    { quant: 'earn', side: 'BUY', sym: 'TSLA', qty: 12, conf: 0.60, thesis: '<b>Delivery beat:</b> Q3 deliveries 6% over consensus. Full size would breach the position limit.' }
+  ].forEach(o => addOrder(o, true));
+  state.log.unshift({ t: new Date(state.clock), kind: 'veto', text: 'TSLA buy held: position over 10%' });
+
+  renderAll(); renderLog();
+  setInterval(tick, 2000);
+  setInterval(newSignal, 22000);
+})();
+</script>
