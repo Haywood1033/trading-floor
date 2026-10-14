@@ -108,3 +108,11 @@ Alpaca paper keys, never in the repo. Either:
 - **Anywhere else:** set `ALPACA_KEY_ID` and `ALPACA_SECRET_KEY` as environment variables.
 
 Then `npm run sync`.
+
+## Daily run (GitHub Actions)
+
+`.github/workflows/daily.yml` runs every weekday after the US close (and on demand from the
+Actions tab): tests, then `scripts/daily.js`, which reads the Alpaca paper account and prices
+read-only, runs every quant, records and grades calls in `state/signals.json`, and writes
+`state/feed.json` for the UI. Needs repository secrets `ALPACA_KEY_ID` and `ALPACA_SECRET_KEY`
+(Settings → Secrets and variables → Actions). It never places orders.
