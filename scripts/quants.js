@@ -6,7 +6,8 @@
 import { reviewPortfolio } from '../src/quants/portfolioReviewer.js';
 import { runMomentum, DEFAULT_UNIVERSE } from '../src/quants/momentum.js';
 import { evaluateOrder, maxQtyWithinLimits } from '../src/risk/riskManager.js';
-import { createTracker, fileSignalStore } from '../src/tracking/tracker.js';
+import { createTracker } from '../src/tracking/tracker.js';
+import { fileSignalStore } from '../src/node/fileStores.js';
 import { sampleBars, samplePortfolio } from '../src/data/sample.js';
 import { last } from '../src/quants/indicators.js';
 

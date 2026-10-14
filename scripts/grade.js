@@ -2,7 +2,8 @@
 //   npm run grade              data/sample-signals.json (no prices to grade against yet)
 //   npm run grade -- --alpaca  data/signals.json, graded with real Alpaca prices
 
-import { createTracker, fileSignalStore } from '../src/tracking/tracker.js';
+import { createTracker } from '../src/tracking/tracker.js';
+import { fileSignalStore } from '../src/node/fileStores.js';
 import { MIN_GRADED } from '../src/tracking/stats.js';
 
 const useAlpaca = process.argv.includes('--alpaca');

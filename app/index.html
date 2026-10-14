@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Trading Floor</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="/app/styles.css">
+</head>
+<body>
+<header class="bar">
+  <div class="brand">Trading <span>Floor</span></div>
+  <div class="status">
+    <span><span class="dot" id="mktDot"></span><span id="mktState">Open</span> · <span class="num" id="simDate"></span> <span class="num" id="clock"></span> ET</span>
+  </div>
+  <div class="spacer"></div>
+  <div class="seg" role="group" aria-label="Simulation speed" id="speedSeg">
+    <button data-act="speed" data-v="0">Pause</button>
+    <button data-act="speed" data-v="1">1×</button>
+    <button data-act="speed" data-v="10">10×</button>
+  </div>
+  <button class="btn ghost" data-act="skip">Skip to close</button>
+  <div class="seg" role="group" aria-label="Execution mode" id="modeSeg">
+    <button data-act="mode" data-v="approval">Approve each trade</button>
+    <button data-act="mode" data-v="auto">Auto within limits</button>
+  </div>
+  <button class="kill" data-act="kill" id="killBtn">Kill switch</button>
+</header>
+
+<div class="halted" id="haltBar" hidden>
+  <span>Trading halted at <span id="haltTime"></span>. Pending orders were cancelled and quants are paused.</span>
+  <div class="spacer"></div>
+  <button data-act="resume">Resume trading</button>
+</div>
+
+<div class="shell">
+  <nav class="nav" id="nav" aria-label="Desks"></nav>
+  <main id="desk" tabindex="-1"></main>
+</div>
+
+<footer class="foot">
+  <span>Phase 1: simulated market and a simulated $100,000 fund. No broker is connected and no real orders exist. State is saved in this browser only.</span>
+  <button class="btn ghost" data-act="reset">Reset simulation</button>
+</footer>
+
+<div class="modal" id="modal" hidden>
+  <div class="box" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+    <h3 id="modalTitle"></h3>
+    <p id="modalBody"></p>
+    <div class="actions">
+      <button class="btn danger" data-act="modalOk" id="modalOk"></button>
+      <button class="btn" data-act="modalCancel">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<script type="module" src="/app/main.js"></script>
+</body>
+</html>

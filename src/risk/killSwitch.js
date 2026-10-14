@@ -1,25 +1,12 @@
 // Kill switch. State lives in a small store so a halt survives a process restart.
-// The default store is a JSON file; tests use the in-memory store.
+// Stores: memoryStore here, a JSON file store in src/node/fileStores.js, localStorage in the app.
 
-import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
-import { dirname } from 'node:path';
 
 export function memoryStore(initial = null) {
   let value = initial;
   return { read: () => value, write: v => { value = v; } };
 }
 
-export function fileStore(path) {
-  return {
-    read() {
-      try { return JSON.parse(readFileSync(path, 'utf8')); } catch { return null; }
-    },
-    write(v) {
-      mkdirSync(dirname(path), { recursive: true });
-      writeFileSync(path, JSON.stringify(v, null, 2));
-    }
-  };
-}
 
 export function createKillSwitch(store = memoryStore(), now = () => new Date()) {
   return {
