@@ -34,9 +34,23 @@ const call = async (h, req, opts) => { const r = res(); await h(req, r, opts); r
 
 test('without storage or a password the API reports what is missing', async () => {
   assert.equal((await call(fundHandler, { method: 'GET', headers: {} }, { env: {} })).body.error, 'storage-not-configured');
-  const noPw = { KV_REST_API_URL: 'x', KV_REST_API_TOKEN: 'y' };
-  const r = await call(fundHandler, { method: 'GET', headers: {} }, { env: noPw });
-  assert.deepEqual([r.statusCode, r.body.error], [503, 'password-not-set']);
+});
+
+test('without APP_PASSWORD the fund syncs with no login, and says it is open', async () => {
+  const { fetchImpl } = fakeUpstash();
+  const env = { KV_REST_API_URL: 'https://kv.example', KV_REST_API_TOKEN: 'tok' };
+  let r = await call(fundHandler, { method: 'GET', url: '/api/fund', headers: {} }, { env, fetchImpl });
+  assert.deepEqual([r.statusCode, r.body.open, r.body.rev], [200, true, 0]);
+  r = await call(fundHandler, { method: 'PUT', headers: {}, body: { rev: 0, state: 'g:A' } }, { env, fetchImpl });
+  assert.equal(r.statusCode, 200);
+  r = await call(loginHandler, { method: 'POST', headers: {}, body: {} }, { env });
+  assert.deepEqual([r.statusCode, r.body.open], [200, true]);
+});
+
+test('with APP_PASSWORD set, responses say the fund is not open', async () => {
+  const { fetchImpl } = fakeUpstash();
+  const r = await call(fundHandler, { method: 'GET', url: '/api/fund', headers: authed }, { env: ENV, fetchImpl });
+  assert.equal(r.body.open, false);
 });
 
 test('the fund is locked without a valid session', async () => {
