@@ -5,6 +5,7 @@ export const DEFAULT_LIMITS = Object.freeze({
   sectorLimits: { Tech: 0.40 },  // per-sector caps; sectors not listed are uncapped
   minCashPct: 0.05,              // cash floor after a buy
   dailyLossLimitPct: -0.02,      // new buys blocked once the day is down this much
+  maxDrawdownPct: 0.15,          // new buys blocked once NAV is this far below its peak
   maxOrderValue: 5000,           // no single order larger than this, approved or not
   // Day-trade cap for small margin accounts. Set dayTradeLimit to null if your
   // broker or the current rules don't apply one to your account.

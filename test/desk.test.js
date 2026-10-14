@@ -112,3 +112,72 @@ test('state survives JSON (localStorage) and keeps ticking', () => {
   for (let i = 0; i < TICKS_PER_DAY; i++) D.tick(t);
   assert.notEqual(t.sim.day, s.sim.day);
 });
+
+test('manager tickets fill through the same risk checks', () => {
+  const s = fresh(); D.openDay(s);
+  assert.equal(D.placeManual(s, { symbol: 'JPM', side: 'buy', qty: 10 }).ok, true);
+  assert.equal(s.account.positions.JPM.openedBy, 'manager');
+  const big = D.placeManual(s, { symbol: 'JPM', side: 'buy', qty: 1000 });
+  assert.equal(big.ok, false);
+  assert.match(big.reason, /JPM|Order value/);
+  assert.equal(D.placeManual(s, { symbol: 'XOM', side: 'sell', qty: 1 }).ok, false);   // nothing to sell
+  assert.equal(D.closePosition(s, 'JPM').ok, true);
+  assert.equal(s.account.positions.JPM, undefined);
+  const sale = s.orders.find(o => o.side === 'sell' && o.symbol === 'JPM');
+  assert.equal(sale.attribution, 'manager');
+  assert.equal(typeof sale.realized, 'number');
+});
+
+test('quant capital cap blocks buys beyond its share of the fund', () => {
+  const s = fresh(); D.openDay(s);
+  D.setQuantAlloc(s, 'mom', 0.06);
+  const [a, b] = D.pending(s);
+  assert.equal(D.approve(s, a.id).ok, true);            // ~5% fits under 6%
+  const r = D.riskFor(s, b);
+  assert.equal(r.approved, false);
+  assert.ok(r.checks.some(c => c.id === 'quantAllocation' && !c.ok));
+  assert.ok(r.fit >= 0 && r.fit < b.qty);
+});
+
+test('changing limits is logged and takes effect', () => {
+  const s = fresh(); D.openDay(s);
+  const o = D.pending(s)[0];
+  assert.equal(D.updateLimits(s, { maxOrderValue: 1000 }), 1);
+  assert.match(s.log[0].text, /maxOrderValue 5000 → 1000/);
+  assert.equal(D.riskFor(s, o).approved, false);
+  D.resetLimits(s);
+  assert.equal(D.riskFor(s, o).approved, true);
+});
+
+test('auto rules set by the manager let auto mode trade', () => {
+  const s = fresh(); D.openDay(s);
+  D.setMode(s, 'auto');
+  assert.equal(s.orders.filter(o => o.approvedBy === 'auto').length, 0);
+  D.updateLimits(s, { autoTiers: ['elite', 'allstar', 'value', 'unproven'], autoMaxOrderValue: 5000 });
+  assert.ok(s.orders.filter(o => o.approvedBy === 'auto').length > 0);
+});
+
+test('day trades and wash sales are tracked', () => {
+  const s = fresh(); D.openDay(s);
+  D.placeManual(s, { symbol: 'JPM', side: 'buy', qty: 10 });
+  assert.equal(D.dayTradesUsed(s), 0);
+  D.placeManual(s, { symbol: 'JPM', side: 'sell', qty: 10 });
+  assert.deepEqual(D.dayTradeLog(s).map(d => d.symbol), ['JPM']);
+  // force a loss sale then a rebuy
+  D.placeManual(s, { symbol: 'XOM', side: 'buy', qty: 10 });
+  s.account.positions.XOM.costBasis *= 2;
+  D.placeManual(s, { symbol: 'XOM', side: 'sell', qty: 10 });
+  D.placeManual(s, { symbol: 'XOM', side: 'buy', qty: 5 });
+  const w = D.washSaleWatch(s).find(x => x.symbol === 'XOM');
+  assert.ok(w && w.loss < 0 && w.rebought);
+});
+
+test('peak NAV is tracked and old saved funds migrate', () => {
+  const s = fresh(); D.openDay(s);
+  for (let i = 0; i < 20; i++) D.tick(s);
+  assert.ok(s.peakEquity >= 100000);
+  const old = JSON.parse(JSON.stringify(s));
+  delete old.peakEquity; delete old.settings.quantAlloc; delete old.fund.spyStart; delete old.settings.limits.maxDrawdownPct;
+  D.migrate(old);
+  assert.ok(old.peakEquity >= 100000 && old.settings.quantAlloc.mom === 0.6 && old.fund.spyStart > 0 && old.settings.limits.maxDrawdownPct === 0.15);
+});

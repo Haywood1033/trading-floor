@@ -10,7 +10,14 @@ within limits). This is not a brokerage and never handles anyone else's money.
 2. **Phase 2: paper validation** with real market data.
 3. **Phase 3: live execution** through a broker API, within the manager's limits.
 
-Phase 1 desks: Floor ✅, Portfolio, Risk, Quants, Blotter, Security, Reports.
+Phase 1 desks (all built; login still to come):
+- **Floor**: overview, approval queue, risk gauges, quant bench, activity log
+- **Portfolio**: NAV vs SPY, allocation by asset class and sector, every position with cost and P&L, close a position
+- **Risk**: edit every limit, auto-trade rules and sector caps; live exposure; blocked orders and limit changes
+- **Quants**: each quant's rules, today's ranking/review, mode, capital cap, full call history
+- **Blotter**: every order with filters, and the manager's trade ticket (same risk checks)
+- **Security**: login status, connections, kill switch, day-trade and wash-sale watch, searchable audit log, export and reset
+- **Reports**: daily brief, fund vs SPY, performance by source, monthly summary
 
 The original static mockup is still at `/mockup/`.
 
@@ -74,7 +81,7 @@ alone does not fit a live trading loop.
 - `app/index.html`, `app/styles.css`, `app/main.js`: app shell, navigation, simulated clock, saving
 - `app/sim.js`: seeded market simulator (78 five-minute steps per trading day)
 - `app/desk.js`: the fund and every manager/desk action; all fills go through the risk manager
-- `app/floor.js`: Floor desk
+- `app/floor.js`: Floor desk; `app/desks/*.js`: the other six desks; `app/ui.js`: shared charts, gauges, bars
 - `src/node/fileStores.js`: file-backed stores for Node scripts (kept out of the browser engine)
 
 - `src/core/portfolio.js`: portfolio snapshots and exposure math (pure functions)

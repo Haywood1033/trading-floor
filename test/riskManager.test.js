@@ -109,3 +109,12 @@ test('evaluation is pure: the snapshot is not mutated', () => {
   evaluateOrder(sell('INTC', 95, 22.10), snap);
   assert.equal(JSON.stringify(snap), before);
 });
+
+test('max drawdown from peak blocks buys but not sells', () => {
+  const snap = samplePortfolio();
+  const eq = summarize(snap).equity;
+  const peak = eq / 0.80; // 20% below peak
+  assert.ok(failed(evaluateOrder(buy('NVDA', 1, 138.40), snap, { peakEquity: peak })).includes('drawdown'));
+  assert.equal(evaluateOrder(sell('INTC', 10, 22.10), snap, { peakEquity: peak }).approved, true);
+  assert.equal(evaluateOrder(buy('NVDA', 1, 138.40), snap, { peakEquity: eq * 1.05 }).approved, true);
+});
