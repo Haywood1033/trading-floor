@@ -1,0 +1,27 @@
+name: Backtest
+
+# Run by hand (Actions tab, or by Claude) to replay the quants over ~10 years of prices.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm test
+      - run: node scripts/backtest.js
+      - name: Save results
+        run: |
+          git config user.name "trading-floor bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add state/backtest.json
+          git diff --cached --quiet || git commit -m "Backtest $(date -u +%Y-%m-%d)"
+          git pull --rebase origin main
+          git push
