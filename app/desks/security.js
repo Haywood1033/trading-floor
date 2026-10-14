@@ -8,9 +8,19 @@ const KINDS = ['all', 'fill', 'signal', 'veto', 'reject', 'halt', 'paper', 'syst
 
 export function renderSecurity(s, ui) {
   const d = ui.drafts;
+  const sy = ui.sync?.status || { mode: 'local' };
+  const SETUP = {
+    'storage-not-configured': 'Server storage is not connected yet. In Vercel: Storage → create an Upstash Redis database → connect it to this project.',
+    'password-not-set': 'Storage is connected but no password is set. In Vercel: Settings → Environment Variables → add APP_PASSWORD.'
+  };
+  const loginCard = sy.mode === 'synced'
+    ? `<div class="statecard"><b>Login and sync <span class="flag-ok">On</span></b>
+        <span>The fund is stored on the server behind your password and shared by every device you sign in on. This device: ${esc(ui.sync.me)}.${ui.sync.otherRunning() ? ' The clock is currently running on another device.' : ''}</span>
+        <div class="actions"><button class="btn" data-act="logout">Sign out on this device</button></div></div>`
+    : `<div class="statecard"><b>Login and sync <span class="flag-warn">${sy.mode === 'login' ? 'Signed out' : sy.mode === 'error' ? 'Problem' : 'Not set up'}</span></b>
+        <span>${esc(SETUP[sy.lastError] || (sy.mode === 'error' ? 'The server returned an error: ' + sy.lastError : sy.mode === 'login' ? 'Sign in to load the shared fund.' : 'This fund is saved in this browser only.'))}</span></div>`;
   const status = `
-    <div class="statecard"><b>Login <span class="flag-warn">Not set up</span></b>
-      <span>Anyone with this site's address can open it. Phase 1 holds only simulated money. Login comes next as its own step: a password kept in your Vercel settings, checked on Vercel's servers.</span></div>
+    ${loginCard}
     <div class="statecard"><b>Broker <span class="flag-off">None connected</span></b>
       <span>Every order fills in the simulation. A broker connection (for example Alpaca) comes in Phase 3, after paper validation.</span></div>
     <div class="statecard"><b>Market data <span class="flag-off">Simulated</span></b>

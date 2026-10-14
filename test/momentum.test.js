@@ -45,3 +45,14 @@ test('on the sample portfolio every proposal passes risk on its own', () => {
   assert.ok(proposals.length > 0);
   for (const p of proposals) assert.equal(evaluateOrder(p, s).approved, true, p.symbol);
 });
+
+test('fractional sizing lets a small account buy expensive names', () => {
+  const bars = { A: line(500, 900) };
+  const s = snap({}, 1000);
+  assert.equal(runMomentum(s, bars, { universe: ['A'] }).proposals.length, 0);         // whole shares: can't afford one
+  const p = runMomentum(s, bars, { universe: ['A'], fractional: true }).proposals[0];
+  assert.equal(p.qty, 0.055);                                                          // $50 / $900, rounded down
+  assert.ok(p.qty * 900 <= 50);
+  const tiny = snap({ A: { qty: 0.054, price: 900, sector: 'Tech', assetClass: 'stock' } }, 951.4);
+  assert.equal(runMomentum(tiny, bars, { universe: ['A'], fractional: true, minOrderValue: 5 }).proposals.length, 0);
+});

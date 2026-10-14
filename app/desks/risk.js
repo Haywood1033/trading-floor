@@ -1,7 +1,6 @@
 // Risk desk: the manager edits every limit; live exposure; what the risk manager blocked.
 
 import * as D from '../desk.js';
-import { DEFAULT_LIMITS } from '../../src/risk/limits.js';
 import { esc, p1, panel, gauge, bars, TIER_LABEL } from '../ui.js';
 
 const SECTORS = ['Tech', 'Health', 'Financials', 'Energy', 'Retail', 'Auto', 'Telecom', 'Media'];
@@ -14,7 +13,8 @@ export const LIMIT_FIELDS = [
   { key: 'dailyLossLimitPct', label: 'Daily loss limit', unit: '%', neg: true, hint: 'Once the day is down this much, new buys stop. Sells still allowed.' },
   { key: 'maxDrawdownPct', label: 'Max drawdown from peak', unit: '%', hint: 'Once NAV is this far below its peak, new buys stop.' },
   { key: 'maxOrderValue', label: 'Max order size', unit: '$', hint: 'No single order above this, approved or not.' },
-  { key: 'autoMaxOrderValue', label: 'Auto-trade size cap', unit: '$', hint: 'Auto mode only fills orders at or under this. Larger ones wait for you.' }
+  { key: 'autoMaxOrderValue', label: 'Auto-trade size cap', unit: '$', hint: 'Auto mode only fills orders at or under this. Larger ones wait for you.' },
+  { key: 'minOrderValue', label: 'Minimum buy', unit: '$', hint: 'Buys smaller than this are blocked, and quants won\'t propose them.' }
 ];
 
 const toInput = (f, v) => (v == null ? '' : f.unit === '%' ? String(+(Math.abs(v) * 100).toFixed(2)) : String(v));
@@ -27,12 +27,12 @@ export function fromInput(f, raw) {
 }
 
 export function renderRisk(s, ui) {
-  const L = s.settings.limits, d = ui.drafts, t = D.totals(s);
+  const L = s.settings.limits, d = ui.drafts, t = D.totals(s), DEF = D.defaultLimitsFor(s.fund.capital);
   const val = (id, fallback) => (d[id] ?? fallback);
   const fields = LIMIT_FIELDS.map(f => `<div class="field">
       <label for="lim-${f.key}">${f.label}</label>
       <input id="lim-${f.key}" data-draft inputmode="decimal" value="${esc(val('lim-' + f.key, toInput(f, L[f.key])))}" aria-describedby="hint-${f.key}">
-      <span class="hint" id="hint-${f.key}">${f.unit === '%' ? 'Percent. ' : 'Dollars. '}${f.hint} Default ${toInput(f, DEFAULT_LIMITS[f.key])}${f.unit}.</span></div>`).join('');
+      <span class="hint" id="hint-${f.key}">${f.unit === '%' ? 'Percent. ' : 'Dollars. '}${f.hint} Default ${f.unit === '$' ? '$' : ''}${toInput(f, DEF[f.key])}${f.unit === '%' ? '%' : ''}.</span></div>`).join('');
   const sectorFields = SECTORS.map(sec => `<div class="field">
       <label for="sec-${sec}">${sec} cap</label>
       <input id="sec-${sec}" data-draft inputmode="decimal" placeholder="no cap" value="${esc(val('sec-' + sec, L.sectorLimits?.[sec] != null ? String(+(L.sectorLimits[sec] * 100).toFixed(2)) : ''))}"></div>`).join('');
