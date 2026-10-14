@@ -6,8 +6,6 @@
 //   sell is right if the stock trailed the benchmark (selling avoided underperformance)
 // "excess" is that relative return, signed so positive always means the call was right.
 
-import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
-import { dirname } from 'node:path';
 import { tierFor, wilsonLower } from './stats.js';
 
 export function memorySignalStore(initial = []) {
@@ -15,12 +13,6 @@ export function memorySignalStore(initial = []) {
   return { load: () => rows, save: r => { rows = r; } };
 }
 
-export function fileSignalStore(path) {
-  return {
-    load() { try { return JSON.parse(readFileSync(path, 'utf8')); } catch { return []; } },
-    save(rows) { mkdirSync(dirname(path), { recursive: true }); writeFileSync(path, JSON.stringify(rows, null, 2)); }
-  };
-}
 
 const today = () => new Date().toISOString().slice(0, 10);
 

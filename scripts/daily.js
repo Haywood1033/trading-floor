@@ -5,7 +5,8 @@
 
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { fetchDaily } from '../src/data/yahoo.js';
-import { createTracker, fileSignalStore } from '../src/tracking/tracker.js';
+import { createTracker } from '../src/tracking/tracker.js';
+import { fileSignalStore } from '../src/node/fileStores.js';
 import { runDesk, symbolsNeeded } from '../src/engine.js';
 
 const ACCOUNT = 'state/account.json';

@@ -4,7 +4,15 @@ Personal automated trading desk for my own brokerage accounts. Quants propose tr
 a risk manager enforces hard limits, and I approve each trade (later: auto-execute
 within limits). This is not a brokerage and never handles anyone else's money.
 
-Mockup: `mockup/index.html` (sample data, simulated prices).
+**The app** (`app/`, served at the site root on Vercel) is being built in three phases:
+1. **Phase 1 (now): the full app on a simulated market.** Every desk and manager control working
+   end to end with a simulated $100,000 fund, state saved in the browser.
+2. **Phase 2: paper validation** with real market data.
+3. **Phase 3: live execution** through a broker API, within the manager's limits.
+
+Phase 1 desks: Floor ✅, Portfolio, Risk, Quants, Blotter, Security, Reports.
+
+The original static mockup is still at `/mockup/`.
 
 ## Desk roles
 
@@ -62,6 +70,12 @@ with Supabase Postgres for state, signals, fills and the audit log. Vercel serve
 alone does not fit a live trading loop.
 
 ## Code layout
+
+- `app/index.html`, `app/styles.css`, `app/main.js`: app shell, navigation, simulated clock, saving
+- `app/sim.js`: seeded market simulator (78 five-minute steps per trading day)
+- `app/desk.js`: the fund and every manager/desk action; all fills go through the risk manager
+- `app/floor.js`: Floor desk
+- `src/node/fileStores.js`: file-backed stores for Node scripts (kept out of the browser engine)
 
 - `src/core/portfolio.js`: portfolio snapshots and exposure math (pure functions)
 - `src/risk/limits.js`: the hard limits above

@@ -1,0 +1,114 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import * as D from '../app/desk.js';
+import { TICKS_PER_DAY } from '../app/sim.js';
+
+const fresh = () => D.freshState({ seed: 11 });
+
+test('the first open queues momentum buys on a cash-only fund', () => {
+  const s = fresh();
+  D.openDay(s);
+  const p = D.pending(s);
+  assert.ok(p.length >= 3);
+  assert.ok(p.every(o => o.quantId === 'mom' && o.side === 'buy'));
+  assert.equal(s.signals.length, p.length);       // every call recorded for grading
+  D.openDay(s);                                     // idempotent within a day
+  assert.equal(D.pending(s).length, p.length);
+});
+
+test('approving fills at the current price and moves cash into the position', () => {
+  const s = fresh(); D.openDay(s);
+  const o = D.pending(s)[0];
+  const price = s.sim.prices[o.symbol];
+  assert.equal(D.approve(s, o.id).ok, true);
+  assert.equal(o.status, 'filled');
+  assert.ok(Math.abs(s.account.cash - (100000 - o.qty * price)) < 1e-6);
+  assert.equal(s.account.positions[o.symbol].qty, o.qty);
+  assert.ok(Math.abs(D.totals(s).equity - 100000) < 1e-6);
+});
+
+test('risk vetoes stop a fill and leave the order pending', () => {
+  const s = fresh(); D.openDay(s);
+  const o = D.pending(s)[0];
+  D.setQty(s, o.id, Math.ceil(30000 / s.sim.prices[o.symbol])); // ~30% of the fund
+  const r = D.approve(s, o.id);
+  assert.equal(r.ok, false);
+  assert.equal(o.status, 'pending');
+  assert.equal(Object.keys(s.account.positions).length, 0);
+  D.resizeToFit(s, o.id);
+  assert.equal(D.approve(s, o.id).ok, true);
+});
+
+test('kill switch cancels the queue and blocks fills until resumed', () => {
+  const s = fresh(); D.openDay(s);
+  const ids = D.pending(s).map(o => o.id);
+  D.halt(s);
+  assert.equal(D.pending(s).length, 0);
+  assert.ok(ids.every(id => s.orders.find(o => o.id === id).status === 'cancelled'));
+  D.skipToClose(s);                                   // next open runs no quants while halted
+  assert.equal(D.pending(s).length, 0);
+  D.resume(s);
+  assert.equal(s.kill.halted, false);
+});
+
+test('unapproved orders expire at the close and the next day opens with new proposals', () => {
+  const s = fresh(); D.openDay(s);
+  const first = D.pending(s).map(o => o.id);
+  const day = s.sim.day;
+  D.skipToClose(s);
+  assert.notEqual(s.sim.day, day);
+  assert.ok(first.every(id => s.orders.find(o => o.id === id).status === 'expired'));
+  assert.ok(D.pending(s).length > 0);
+  assert.equal(s.curve.daily.length, 1);
+});
+
+test('auto mode fills nothing while every quant is unproven', () => {
+  const s = fresh(); D.openDay(s);
+  D.setMode(s, 'auto');
+  assert.ok(D.pending(s).length > 0);
+  assert.ok(D.pending(s).every(o => !D.riskFor(s, o).auto.auto));
+});
+
+test('auto mode fills small orders from a proven quant', () => {
+  const s = fresh(); D.openDay(s);
+  s.settings.limits.autoTiers = ['elite', 'allstar', 'value', 'unproven']; // manager widens auto (Risk desk later)
+  s.settings.limits.autoMaxOrderValue = 6000;                                // momentum sizes ~$5k per buy
+  D.setMode(s, 'auto');
+  const filled = s.orders.filter(o => o.status === 'filled' && o.approvedBy === 'auto');
+  assert.ok(filled.length > 0);
+  assert.ok(filled.every(o => o.fillPrice * o.qty <= s.settings.limits.autoMaxOrderValue));
+});
+
+test('paper and off modes', () => {
+  const s = fresh();
+  D.setQuantMode(s, 'mom', 'paper');
+  D.openDay(s);
+  assert.equal(D.pending(s).length, 0);
+  assert.ok(s.signals.length > 0);
+  const t = fresh(); D.setQuantMode(t, 'mom', 'off'); D.openDay(t);
+  assert.equal(t.signals.length, 0);
+});
+
+test('sells realize P&L against cost basis, and calls get graded after 63 days', () => {
+  const s = fresh(); D.openDay(s);
+  const o = D.pending(s)[0];
+  D.approve(s, o.id);
+  for (let d = 0; d < 64; d++) D.skipToClose(s);
+  assert.ok(s.signals.some(x => x.status === 'graded'));
+  const sb = D.scoreboard(s).find(q => q.id === 'mom');
+  assert.ok(sb.graded > 0);
+  // sell the position through the same path
+  s.orders.unshift({ id: s.seq++, status: 'pending', quantId: 'rev', symbol: o.symbol, side: 'sell', qty: s.account.positions[o.symbol].qty, sector: o.sector, assetClass: 'stock' });
+  const before = s.account.realized;
+  assert.equal(D.approve(s, s.orders[0].id).ok, true);
+  assert.notEqual(s.account.realized, before);
+  assert.equal(s.account.positions[o.symbol], undefined);
+});
+
+test('state survives JSON (localStorage) and keeps ticking', () => {
+  const s = fresh(); D.openDay(s);
+  for (let i = 0; i < 10; i++) D.tick(s);
+  const t = JSON.parse(JSON.stringify(s));
+  for (let i = 0; i < TICKS_PER_DAY; i++) D.tick(t);
+  assert.notEqual(t.sim.day, s.sim.day);
+});
