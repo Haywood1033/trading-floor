@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import * as D from '../app/desk.js';
 import { TICKS_PER_DAY } from '../app/sim.js';
 
-const fresh = () => D.freshState({ seed: 11 });
+const fresh = () => D.freshState({ seed: 11, capital: 100000 });
 
 test('the first open queues momentum buys on a cash-only fund', () => {
   const s = fresh();
@@ -143,7 +143,7 @@ test('changing limits is logged and takes effect', () => {
   const s = fresh(); D.openDay(s);
   const o = D.pending(s)[0];
   assert.equal(D.updateLimits(s, { maxOrderValue: 1000 }), 1);
-  assert.match(s.log[0].text, /maxOrderValue 5000 → 1000/);
+  assert.match(s.log[0].text, /maxOrderValue 20000 → 1000/);
   assert.equal(D.riskFor(s, o).approved, false);
   D.resetLimits(s);
   assert.equal(D.riskFor(s, o).approved, true);
@@ -180,4 +180,25 @@ test('peak NAV is tracked and old saved funds migrate', () => {
   delete old.peakEquity; delete old.settings.quantAlloc; delete old.fund.spyStart; delete old.settings.limits.maxDrawdownPct;
   D.migrate(old);
   assert.ok(old.peakEquity >= 100000 && old.settings.quantAlloc.mom === 0.6 && old.fund.spyStart > 0 && old.settings.limits.maxDrawdownPct === 0.15);
+});
+
+test('a $1,000 fund trades fractional shares with limits scaled to its size', () => {
+  const s = D.freshState({ seed: 11 });
+  assert.equal(s.fund.capital, 1000);
+  const L = s.settings.limits;
+  assert.deepEqual([L.maxOrderValue, L.autoMaxOrderValue, L.minOrderValue], [200, 100, 5]);
+  D.openDay(s);
+  const p = D.pending(s);
+  assert.ok(p.length >= 3, 'momentum still proposes on a small fund');
+  assert.ok(p.some(o => !Number.isInteger(o.qty)), 'fractional sizes');
+  assert.ok(p.every(o => o.qty * s.sim.prices[o.symbol] <= 50.01));
+  assert.equal(D.approve(s, p[0].id).ok, true);
+  assert.ok(D.totals(s).equity > 999 && D.totals(s).equity < 1001);
+  // the minimum order applies to buys
+  assert.equal(D.placeManual(s, { symbol: 'NVDA', side: 'buy', qty: 0.01 }).ok, false);
+  // +/- moves about 1% of the fund
+  const o = p[1];
+  assert.ok(Math.abs(D.nudge(s, o) * s.sim.prices[o.symbol] - 10) < 2);
+  D.resetLimits(s);
+  assert.equal(s.settings.limits.maxOrderValue, 200);
 });

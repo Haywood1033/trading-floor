@@ -14,6 +14,7 @@
   <div class="brand">Trading <span>Floor</span></div>
   <div class="status">
     <span><span class="dot" id="mktDot"></span><span id="mktState">Open</span> · <span class="num" id="simDate"></span> <span class="num" id="clock"></span> ET</span>
+    <span class="syncbadge" id="syncBadge"></span>
   </div>
   <div class="spacer"></div>
   <div class="seg" role="group" aria-label="Simulation speed" id="speedSeg">
@@ -41,11 +42,24 @@
 </div>
 
 <footer class="foot">
-  <span>Phase 1: simulated market and a simulated $100,000 fund. No broker is connected and no real orders exist. State is saved in this browser only.</span>
+  <span>Phase 1: simulated market and a simulated fund. No broker is connected and no real orders exist. <span id="syncNote">Saved in this browser only.</span></span>
   <button class="btn ghost" data-act="reset">Reset simulation</button>
 </footer>
 
 <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+
+<div class="modal" id="login" hidden>
+  <form class="box" id="loginForm" aria-labelledby="loginTitle">
+    <h3 id="loginTitle">Sign in</h3>
+    <p>Enter the fund password to open the desk on this device.</p>
+    <input type="password" id="loginPw" autocomplete="current-password" aria-label="Password" required>
+    <div id="loginErr" class="down" role="alert"></div>
+    <div class="actions">
+      <button class="btn primary" type="submit">Sign in</button>
+      <button class="btn ghost" type="button" data-act="useLocal">Use this browser only</button>
+    </div>
+  </form>
+</div>
 
 <div class="modal" id="modal" hidden>
   <div class="box" role="dialog" aria-modal="true" aria-labelledby="modalTitle">

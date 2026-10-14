@@ -14,7 +14,7 @@ import { summarize } from '../src/core/portfolio.js';
 import { DEFAULT_LIMITS } from '../src/risk/limits.js';
 import { sectorOf } from '../src/core/sectors.js';
 
-export const STATE_VERSION = 1;
+export const STATE_VERSION = 2; // 2: $1,000 fund, fractional shares
 export const CRYPTO = ['BTC', 'ETH', 'SOL'];
 export const QUANTS = [
   { id: 'rev', name: 'Portfolio reviewer', desc: 'Flags stale holdings and oversized positions; proposes sells and trims.' },
@@ -29,11 +29,24 @@ export function migrate(state) {
   state.peakEquity ??= Math.max(state.fund.capital, ...state.curve.daily.map(d => d.equity));
   state.fund.spyStart ??= state.sim.prices.SPY;
   state.settings.quantAlloc ??= { ...DEFAULT_ALLOC };
-  state.settings.limits = { ...DEFAULT_LIMITS, ...state.settings.limits };
+  state.settings.limits = { ...defaultLimitsFor(state.fund.capital), ...state.settings.limits };
   return state;
 }
 
-export function freshState({ startDate = '2026-10-14', capital = 100000, seed = 20261014 } = {}) {
+export const DEFAULT_CAPITAL = 1000;
+
+// Default limits scaled to the fund: percentages as in DEFAULT_LIMITS, dollar limits as a
+// share of starting capital, and a minimum trade so tiny orders aren't proposed.
+export function defaultLimitsFor(capital) {
+  return {
+    ...structuredClone(DEFAULT_LIMITS),
+    maxOrderValue: Math.round(capital * 0.20),
+    autoMaxOrderValue: Math.round(capital * 0.10),
+    minOrderValue: Math.max(1, Math.round(capital * 0.005))
+  };
+}
+
+export function freshState({ startDate = '2026-10-14', capital = DEFAULT_CAPITAL, seed = 20261014 } = {}) {
   const sim = createSim({ bars: sampleBars(), startDate, seed, crypto: CRYPTO });
   return {
     version: STATE_VERSION,
@@ -47,7 +60,7 @@ export function freshState({ startDate = '2026-10-14', capital = 100000, seed = 
     signals: [],
     log: [],
     kill: { halted: false },
-    settings: { mode: 'approval', speed: 1, limits: structuredClone(DEFAULT_LIMITS), quantModes: { rev: 'live', mom: 'live' }, quantAlloc: { ...DEFAULT_ALLOC } },
+    settings: { mode: 'approval', speed: 1, limits: defaultLimitsFor(capital), quantModes: { rev: 'live', mom: 'live' }, quantAlloc: { ...DEFAULT_ALLOC } },
     curve: { intraday: [capital], daily: [] },
     seq: 1
   };
@@ -120,6 +133,8 @@ export function evaluate(state, order) {
   const r = evaluateOrder(order, snapshot(state), ctx(state, order));
   const a = allocationCheck(state, order);
   if (a) r.checks.push(a);
+  const min = state.settings.limits.minOrderValue;
+  if (min && order.side === 'buy' && order.qty * order.price < min) r.checks.push({ id: 'minOrder', ok: false, message: `Order under the $${min} minimum` });
   return { approved: r.checks.every(c => c.ok), checks: r.checks };
 }
 
@@ -149,7 +164,14 @@ export function riskFor(state, order) {
   const auto = allocFail ? { auto: false, reasons: [...autoBase.reasons, allocFail.message] } : autoBase;
   return { ...risk, fit, auto, price: o.price, value: o.qty * o.price };
 }
-export const stepFor = symbol => (CRYPTO.includes(symbol) ? (symbol === 'BTC' ? 0.001 : symbol === 'ETH' ? 0.01 : 0.1) : 1);
+// Size step for the +/- buttons and resize-to-fit: about a dollar or two per step at these prices.
+export const stepFor = symbol => (CRYPTO.includes(symbol) ? (symbol === 'BTC' ? 0.00001 : symbol === 'ETH' ? 0.0001 : 0.01) : 0.001);
+const roundQty = q => +(+q).toFixed(5);
+// +/- buttons move an order by about 1% of the fund, in whole steps.
+export function nudge(state, o) {
+  const st = stepFor(o.symbol);
+  return roundQty(Math.max(st, Math.round(state.fund.capital * 0.01 / state.sim.prices[o.symbol] / st) * st));
+}
 
 // ---------- writes
 
@@ -174,8 +196,8 @@ export function openDay(state) {
   const bars = state.sim.history;
   const snap = snapshot(state);
   const runs = {
-    rev: () => reviewPortfolio(snap, bars).proposals,
-    mom: () => runMomentum(snap, bars, { universe: DEFAULT_UNIVERSE }).proposals
+    rev: () => reviewPortfolio(snap, bars, { limits: state.settings.limits, fractional: true }).proposals,
+    mom: () => runMomentum(snap, bars, { universe: DEFAULT_UNIVERSE, fractional: true, minOrderValue: state.settings.limits.minOrderValue || 0 }).proposals
   };
   const t = tracker(state);
   for (const q of QUANTS) {
@@ -256,7 +278,7 @@ export function setQty(state, id, qty) {
   const o = state.orders.find(x => x.id === id && x.status === 'pending');
   if (!o || !(qty > 0)) return;
   if (o.side === 'sell') qty = Math.min(qty, state.account.positions[o.symbol]?.qty ?? qty);
-  o.qty = +qty.toFixed(6);
+  o.qty = roundQty(qty);
 }
 
 export function resizeToFit(state, id) {
@@ -308,7 +330,7 @@ export function updateLimits(state, changes) {
   return notes.length;
 }
 export function resetLimits(state) {
-  state.settings.limits = structuredClone(DEFAULT_LIMITS);
+  state.settings.limits = defaultLimitsFor(state.fund.capital);
   log(state, 'system', 'Risk limits reset to defaults.');
 }
 export function setQuantAlloc(state, id, value) {
@@ -403,4 +425,4 @@ export function skipToClose(state) {
 
 export const usd = (v, d = 0) => (v < 0 ? '-' : '') + '$' + Math.abs(v).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d });
 export const pct = (v, d = 2) => (v > 0 ? '+' : '') + (v * 100).toFixed(d) + '%';
-export const fmtQty = o => (CRYPTO.includes(o.symbol) ? (+(+o.qty).toFixed(4)).toString() : String(o.qty));
+export const fmtQty = o => String(+(+o.qty).toFixed(CRYPTO.includes(o.symbol) ? 5 : 3));

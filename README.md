@@ -6,11 +6,11 @@ within limits). This is not a brokerage and never handles anyone else's money.
 
 **The app** (`app/`, served at the site root on Vercel) is being built in three phases:
 1. **Phase 1 (now): the full app on a simulated market.** Every desk and manager control working
-   end to end with a simulated $100,000 fund, state saved in the browser.
+   end to end with a simulated $1,000 fund (fractional shares), synced across devices.
 2. **Phase 2: paper validation** with real market data.
 3. **Phase 3: live execution** through a broker API, within the manager's limits.
 
-Phase 1 desks (all built; login still to come):
+Phase 1 desks (all built):
 - **Floor**: overview, approval queue, risk gauges, quant bench, activity log
 - **Portfolio**: NAV vs SPY, allocation by asset class and sector, every position with cost and P&L, close a position
 - **Risk**: edit every limit, auto-trade rules and sector caps; live exposure; blocked orders and limit changes
@@ -143,3 +143,19 @@ GitHub Actions because the Claude cloud session can't reach any price source.
   `state/signals.json`, writes `state/feed.json` for the UI. Never places orders.
 
 The Alpaca adapter stays in `src/brokers/` for later, if real order placement is wanted.
+
+## Server sync and login (Vercel)
+
+The fund is stored on the server so every device sees the same desk. Two settings in Vercel:
+
+1. **Storage**: project → Storage → create an **Upstash Redis** database (free) → connect it to
+   this project. Vercel adds `KV_REST_API_URL` and `KV_REST_API_TOKEN` itself.
+2. **Password**: project → Settings → Environment Variables → add `APP_PASSWORD`.
+
+Then redeploy. Without both, the API answers 503 and the app keeps the fund in the browser.
+
+- `api/fund.js` (GET full or `?meta=1`, PUT with revision), `api/login.js`, `api/logout.js`
+- `server/handlers.js`, `server/store.js` (compare-and-set on a revision number),
+  `server/auth.js` (HttpOnly session cookie derived from the password)
+- `app/sync.js`: compresses the fund, saves with revisions, polls for changes, and passes a
+  20-second clock lease so only one device runs the simulated market at a time

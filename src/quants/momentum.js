@@ -25,8 +25,10 @@ export function momentumScore(closes) {
 }
 
 // Returns { ranked: [...every scored name], proposals: [...buy orders] }
+// fractional: size in thousandths of a share (brokers like Alpaca and Robinhood allow this),
+// which small accounts need. minOrderValue skips top-ups too small to bother with.
 export function runMomentum(snapshot, bars, {
-  universe = DEFAULT_UNIVERSE, topN = 5, targetWeight = 0.05, minScore = 0.10
+  universe = DEFAULT_UNIVERSE, topN = 5, targetWeight = 0.05, minScore = 0.10, fractional = false, minOrderValue = 0
 } = {}) {
   const equity = summarize(snapshot).equity;
   const ranked = [];
@@ -48,15 +50,15 @@ export function runMomentum(snapshot, bars, {
     const held = snapshot.positions[r.symbol];
     const heldValue = held ? held.qty * held.price : 0;
     const gap = targetWeight * equity - heldValue;
-    const qty = Math.floor(gap / r.price);
-    if (qty < 1) { r.why = 'already at target weight'; return; }
+    const qty = fractional ? Math.floor(gap / r.price * 1000) / 1000 : Math.floor(gap / r.price);
+    if (qty <= 0 || qty * r.price < Math.max(minOrderValue, 1e-9)) { r.why = 'already at target weight'; return; }
     const rank = ranked.indexOf(r) + 1;
     proposals.push({
       quantId: QUANT_ID, symbol: r.symbol, side: 'buy', qty, price: r.price,
       sector: sectorOf(r.symbol), assetClass: 'stock',
       strength: 1 - i / topN, confidence: 0.55, horizon: '3m',
       thesis: `Momentum leader: #${rank} of ${universe.length} on 12-1 month return (+${(r.score * 100).toFixed(0)}%), above its 200-day average. ` +
-        `Buy ${qty} to reach ~${(targetWeight * 100).toFixed(0)}% of the account.`
+        `Buy ${qty} (~$${(qty * r.price).toFixed(0)}) to reach ~${(targetWeight * 100).toFixed(0)}% of the account.`
     });
   });
   return { ranked, proposals };

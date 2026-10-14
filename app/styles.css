@@ -202,3 +202,9 @@ td.r, th.r { text-align: right; }
   background: var(--panel); border: 1px solid var(--line); border-left: 4px solid var(--up); border-radius: 6px; padding: 10px 14px; box-shadow: 0 6px 24px rgba(0,0,0,.35); }
 .toast.bad { border-left-color: var(--down); }
 @media (max-width: 760px) { .toast { bottom: 80px; } }
+
+.syncbadge { font-size: 12px; color: var(--muted); }
+.syncbadge.synced { color: var(--up); }
+.syncbadge.error, .syncbadge.login { color: var(--warn); }
+#loginPw { font: inherit; color: var(--fg); background: var(--panel-2); border: 1px solid var(--line); border-radius: 4px; padding: 8px 10px; }
+#loginPw:focus { outline: 2px solid var(--accent); outline-offset: 0; }
