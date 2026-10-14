@@ -109,10 +109,16 @@ Alpaca paper keys, never in the repo. Either:
 
 Then `npm run sync`.
 
-## Daily run (GitHub Actions)
+## Daily run and backtest (GitHub Actions, no accounts or keys)
 
-`.github/workflows/daily.yml` runs every weekday after the US close (and on demand from the
-Actions tab): tests, then `scripts/daily.js`, which reads the Alpaca paper account and prices
-read-only, runs every quant, records and grades calls in `state/signals.json`, and writes
-`state/feed.json` for the UI. Needs repository secrets `ALPACA_KEY_ID` and `ALPACA_SECRET_KEY`
-(Settings → Secrets and variables → Actions). It never places orders.
+Prices come from Yahoo Finance's free public chart endpoint (`src/data/yahoo.js`), fetched on
+GitHub Actions because the Claude cloud session can't reach any price source.
+
+- `.github/workflows/backtest.yml` (run by hand): replays momentum and the portfolio reviewer
+  over ~10 years and grades every call the same way live calls are graded. Results in
+  `state/backtest.json`. Caveats (survivorship bias, no costs) are written into the file.
+- `.github/workflows/daily.yml` (weekdays after the close): runs the desk on a simulated paper
+  account (`state/account.json`, starts at $100k cash), records and grades calls in
+  `state/signals.json`, writes `state/feed.json` for the UI. Never places orders.
+
+The Alpaca adapter stays in `src/brokers/` for later, if real order placement is wanted.
