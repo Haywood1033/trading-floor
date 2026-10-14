@@ -1,0 +1,535 @@
+{
+  "generatedAt": "2026-10-14T01:35:10.947Z",
+  "missing": [],
+  "period": {
+    "from": "2017-10-26",
+    "to": "2026-07-15",
+    "tradingDays": 2512
+  },
+  "rules": {
+    "horizonDays": 63,
+    "rebalanceEveryDays": 21,
+    "benchmark": "SPY",
+    "universe": [
+      "AAPL",
+      "MSFT",
+      "NVDA",
+      "AMZN",
+      "GOOGL",
+      "META",
+      "AVGO",
+      "LLY",
+      "JPM",
+      "XOM",
+      "COST",
+      "WMT",
+      "HD",
+      "UNH",
+      "TSLA",
+      "XLE",
+      "XLF",
+      "XLV",
+      "QQQ"
+    ]
+  },
+  "momentum": {
+    "n": 495,
+    "hits": 296,
+    "hitRate": 0.597979797979798,
+    "lowerBound": 0.5612899657495952,
+    "avgExcess": 0.04369759639885539,
+    "tier": "elite",
+    "byYear": {
+      "2017": {
+        "n": 15,
+        "hits": 7,
+        "hitRate": 0.4666666666666667,
+        "lowerBound": 0.2766614940638845,
+        "avgExcess": 0.011981395754324805,
+        "tier": "unproven"
+      },
+      "2018": {
+        "n": 56,
+        "hits": 35,
+        "hitRate": 0.625,
+        "lowerBound": 0.5151392081416335,
+        "avgExcess": -0.009703124580812645,
+        "tier": "allstar"
+      },
+      "2019": {
+        "n": 53,
+        "hits": 33,
+        "hitRate": 0.6226415094339622,
+        "lowerBound": 0.509683636302502,
+        "avgExcess": 0.023345179605444362,
+        "tier": "allstar"
+      },
+      "2020": {
+        "n": 59,
+        "hits": 38,
+        "hitRate": 0.6440677966101694,
+        "lowerBound": 0.5372855614811585,
+        "avgExcess": 0.14060101403602968,
+        "tier": "allstar"
+      },
+      "2021": {
+        "n": 60,
+        "hits": 34,
+        "hitRate": 0.5666666666666667,
+        "lowerBound": 0.46080905904989833,
+        "avgExcess": 0.04751134217680493,
+        "tier": "value"
+      },
+      "2022": {
+        "n": 54,
+        "hits": 35,
+        "hitRate": 0.6481481481481481,
+        "lowerBound": 0.5365190176010818,
+        "avgExcess": 0.03860703860167005,
+        "tier": "allstar"
+      },
+      "2023": {
+        "n": 48,
+        "hits": 31,
+        "hitRate": 0.6458333333333334,
+        "lowerBound": 0.5272926794341364,
+        "avgExcess": 0.09300801059030228,
+        "tier": "allstar"
+      },
+      "2024": {
+        "n": 60,
+        "hits": 39,
+        "hitRate": 0.65,
+        "lowerBound": 0.5442320157150127,
+        "avgExcess": 0.05977086179850352,
+        "tier": "allstar"
+      },
+      "2025": {
+        "n": 55,
+        "hits": 27,
+        "hitRate": 0.4909090909090909,
+        "lowerBound": 0.3830781665961749,
+        "avgExcess": -0.0003791298816517791,
+        "tier": "unproven"
+      },
+      "2026": {
+        "n": 35,
+        "hits": 17,
+        "hitRate": 0.4857142857142857,
+        "lowerBound": 0.3528440364563826,
+        "avgExcess": -0.014400993640645798,
+        "tier": "unproven"
+      }
+    }
+  },
+  "baselineBuyEverything": {
+    "n": 1995,
+    "hits": 1092,
+    "hitRate": 0.5473684210526316,
+    "lowerBound": 0.5289846960354107,
+    "avgExcess": 0.024857779602715676,
+    "tier": "allstar"
+  },
+  "reviewer": {
+    "n": 269,
+    "hits": 118,
+    "hitRate": 0.43866171003717475,
+    "lowerBound": 0.3897473710466111,
+    "avgExcess": -0.04311200146158187,
+    "tier": "unproven",
+    "byYear": {
+      "2017": {
+        "n": 1,
+        "hits": 1,
+        "hitRate": 1,
+        "lowerBound": 0.2698308834937703,
+        "avgExcess": 0.13437691506440297,
+        "tier": "unproven"
+      },
+      "2018": {
+        "n": 22,
+        "hits": 4,
+        "hitRate": 0.18181818181818182,
+        "lowerBound": 0.08435014861788193,
+        "avgExcess": -0.07299494126666352,
+        "tier": "unproven"
+      },
+      "2019": {
+        "n": 38,
+        "hits": 20,
+        "hitRate": 0.5263157894736842,
+        "lowerBound": 0.39581725789735955,
+        "avgExcess": -0.02774350290980144,
+        "tier": "unproven"
+      },
+      "2020": {
+        "n": 39,
+        "hits": 23,
+        "hitRate": 0.5897435897435898,
+        "lowerBound": 0.4584927848350647,
+        "avgExcess": -0.008415660926298139,
+        "tier": "unproven"
+      },
+      "2021": {
+        "n": 2,
+        "hits": 1,
+        "hitRate": 0.5,
+        "lowerBound": 0.12085198061245211,
+        "avgExcess": -0.23872865837139745,
+        "tier": "unproven"
+      },
+      "2022": {
+        "n": 74,
+        "hits": 33,
+        "hitRate": 0.44594594594594594,
+        "lowerBound": 0.35447177333161356,
+        "avgExcess": -0.0294336252545266,
+        "tier": "unproven"
+      },
+      "2023": {
+        "n": 22,
+        "hits": 6,
+        "hitRate": 0.2727272727272727,
+        "lowerBound": 0.14813975174790284,
+        "avgExcess": -0.12037447217224456,
+        "tier": "unproven"
+      },
+      "2024": {
+        "n": 12,
+        "hits": 2,
+        "hitRate": 0.16666666666666666,
+        "lowerBound": 0.05677543170572946,
+        "avgExcess": -0.11435341272801362,
+        "tier": "unproven"
+      },
+      "2025": {
+        "n": 33,
+        "hits": 13,
+        "hitRate": 0.3939393939393939,
+        "lowerBound": 0.2672232638820259,
+        "avgExcess": -0.05567704128746649,
+        "tier": "unproven"
+      },
+      "2026": {
+        "n": 26,
+        "hits": 15,
+        "hitRate": 0.5769230769230769,
+        "lowerBound": 0.4178116897084102,
+        "avgExcess": -0.008837900964444078,
+        "tier": "unproven"
+      }
+    }
+  },
+  "caveats": [
+    "Survivorship bias: the universe is today's large companies, which flatters momentum.",
+    "No trading costs or slippage. Calls are graded relative to SPY over 63 trading days.",
+    "Reviewer results assume you held an equal slice of every universe name.",
+    "Prices from Yahoo Finance's unofficial endpoint (adjusted closes)."
+  ],
+  "recentCalls": {
+    "momentum": [
+      {
+        "date": "2026-05-07",
+        "symbol": "GOOGL",
+        "side": "buy",
+        "exitPrice": 354.0723876953125,
+        "ret": -0.10924494780455607,
+        "benchRet": 0.059695569091296585,
+        "excess": -0.16894051689585265,
+        "correct": false
+      },
+      {
+        "date": "2026-05-07",
+        "symbol": "AVGO",
+        "side": "buy",
+        "exitPrice": 426.98248291015625,
+        "ret": 0.03848407663073439,
+        "benchRet": 0.059695569091296585,
+        "excess": -0.021211492460562198,
+        "correct": false
+      },
+      {
+        "date": "2026-05-07",
+        "symbol": "NVDA",
+        "side": "buy",
+        "exitPrice": 223.70968627929688,
+        "ret": 0.060146700610170356,
+        "benchRet": 0.059695569091296585,
+        "excess": 0.0004511315188737708,
+        "correct": true
+      },
+      {
+        "date": "2026-05-07",
+        "symbol": "XOM",
+        "side": "buy",
+        "exitPrice": 152.055419921875,
+        "ret": 0.05115811309963525,
+        "benchRet": 0.059695569091296585,
+        "excess": -0.008537455991661336,
+        "correct": false
+      },
+      {
+        "date": "2026-05-07",
+        "symbol": "XLE",
+        "side": "buy",
+        "exitPrice": 57.16023635864258,
+        "ret": 0.03511486060895441,
+        "benchRet": 0.059695569091296585,
+        "excess": -0.024580708482342173,
+        "correct": false
+      },
+      {
+        "date": "2026-06-08",
+        "symbol": "GOOGL",
+        "side": "buy",
+        "exitPrice": 338.3599853515625,
+        "ret": -0.06807555835170931,
+        "benchRet": 0.038842737567046814,
+        "excess": -0.10691829591875612,
+        "correct": false
+      },
+      {
+        "date": "2026-06-08",
+        "symbol": "AVGO",
+        "side": "buy",
+        "exitPrice": 367.89007568359375,
+        "ret": -0.0692302281659607,
+        "benchRet": 0.038842737567046814,
+        "excess": -0.10807296573300751,
+        "correct": false
+      },
+      {
+        "date": "2026-06-08",
+        "symbol": "NVDA",
+        "side": "buy",
+        "exitPrice": 225.47769165039062,
+        "ret": 0.0819113982364228,
+        "benchRet": 0.038842737567046814,
+        "excess": 0.04306866066937598,
+        "correct": true
+      },
+      {
+        "date": "2026-06-08",
+        "symbol": "XOM",
+        "side": "buy",
+        "exitPrice": 160.66000366210938,
+        "ret": 0.06557039262608866,
+        "benchRet": 0.038842737567046814,
+        "excess": 0.026727655059041844,
+        "correct": true
+      },
+      {
+        "date": "2026-06-08",
+        "symbol": "AAPL",
+        "side": "buy",
+        "exitPrice": 316.2200012207031,
+        "ret": 0.049587793138188285,
+        "benchRet": 0.038842737567046814,
+        "excess": 0.01074505557114147,
+        "correct": true
+      },
+      {
+        "date": "2026-07-09",
+        "symbol": "GOOGL",
+        "side": "buy",
+        "exitPrice": 350.5,
+        "ret": -0.02274994864945956,
+        "benchRet": 0.03650332790417332,
+        "excess": -0.05925327655363288,
+        "correct": false
+      },
+      {
+        "date": "2026-07-09",
+        "symbol": "LLY",
+        "side": "buy",
+        "exitPrice": 1188.719970703125,
+        "ret": -0.02179761323694085,
+        "benchRet": 0.03650332790417332,
+        "excess": -0.05830094114111417,
+        "correct": false
+      },
+      {
+        "date": "2026-07-09",
+        "symbol": "AVGO",
+        "side": "buy",
+        "exitPrice": 376.510009765625,
+        "ret": -0.059620499948093264,
+        "benchRet": 0.03650332790417332,
+        "excess": -0.09612382785226659,
+        "correct": false
+      },
+      {
+        "date": "2026-07-09",
+        "symbol": "AAPL",
+        "side": "buy",
+        "exitPrice": 336.6700134277344,
+        "ret": 0.06558843802086511,
+        "benchRet": 0.03650332790417332,
+        "excess": 0.029085110116691792,
+        "correct": true
+      },
+      {
+        "date": "2026-07-09",
+        "symbol": "XOM",
+        "side": "buy",
+        "exitPrice": 164.0500030517578,
+        "ret": 0.2011657960754012,
+        "benchRet": 0.03650332790417332,
+        "excess": 0.16466246817122787,
+        "correct": true
+      }
+    ],
+    "reviewer": [
+      {
+        "date": "2026-04-08",
+        "symbol": "UNH",
+        "side": "sell",
+        "exitPrice": 429.03814697265625,
+        "ret": 0.41886875401300827,
+        "benchRet": 0.11484535781239136,
+        "excess": -0.3040233962006169,
+        "correct": false
+      },
+      {
+        "date": "2026-04-08",
+        "symbol": "HD",
+        "side": "sell",
+        "exitPrice": 336.2520751953125,
+        "ret": 0.015203205881195725,
+        "benchRet": 0.11484535781239136,
+        "excess": 0.09964215193119563,
+        "correct": true
+      },
+      {
+        "date": "2026-04-08",
+        "symbol": "TSLA",
+        "side": "sell",
+        "exitPrice": 406.54998779296875,
+        "ret": 0.18441365708075375,
+        "benchRet": 0.11484535781239136,
+        "excess": -0.06956829926836239,
+        "correct": false
+      },
+      {
+        "date": "2026-05-07",
+        "symbol": "MSFT",
+        "side": "sell",
+        "exitPrice": 499.0505065917969,
+        "ret": 0.19084750215953195,
+        "benchRet": 0.059695569091296585,
+        "excess": -0.13115193306823536,
+        "correct": false
+      },
+      {
+        "date": "2026-05-07",
+        "symbol": "META",
+        "side": "sell",
+        "exitPrice": 591.633056640625,
+        "ret": -0.03917134922787302,
+        "benchRet": 0.059695569091296585,
+        "excess": 0.0988669183191696,
+        "correct": true
+      },
+      {
+        "date": "2026-05-07",
+        "symbol": "HD",
+        "side": "sell",
+        "exitPrice": 353.0185241699219,
+        "ret": 0.11048646820001085,
+        "benchRet": 0.059695569091296585,
+        "excess": -0.05079089910871426,
+        "correct": false
+      },
+      {
+        "date": "2026-06-08",
+        "symbol": "MSFT",
+        "side": "sell",
+        "exitPrice": 493.95001220703125,
+        "ret": 0.20192328470294352,
+        "benchRet": 0.038842737567046814,
+        "excess": -0.1630805471358967,
+        "correct": false
+      },
+      {
+        "date": "2026-06-08",
+        "symbol": "META",
+        "side": "sell",
+        "exitPrice": 612.9962158203125,
+        "ret": 0.0489563368385475,
+        "benchRet": 0.038842737567046814,
+        "excess": -0.010113599271500684,
+        "correct": false
+      },
+      {
+        "date": "2026-06-08",
+        "symbol": "HD",
+        "side": "sell",
+        "exitPrice": 313.70001220703125,
+        "ret": 0.020347244687169086,
+        "benchRet": 0.038842737567046814,
+        "excess": 0.01849549287987773,
+        "correct": true
+      },
+      {
+        "date": "2026-06-08",
+        "symbol": "TSLA",
+        "side": "sell",
+        "exitPrice": 368.1600036621094,
+        "ret": -0.09974326281294232,
+        "benchRet": 0.038842737567046814,
+        "excess": 0.13858600037998914,
+        "correct": true
+      },
+      {
+        "date": "2026-06-08",
+        "symbol": "XLF",
+        "side": "sell",
+        "exitPrice": 57.09791946411133,
+        "ret": 0.10642133991475133,
+        "benchRet": 0.038842737567046814,
+        "excess": -0.06757860234770452,
+        "correct": false
+      },
+      {
+        "date": "2026-07-09",
+        "symbol": "MSFT",
+        "side": "sell",
+        "exitPrice": 529.760009765625,
+        "ret": 0.3808858978527081,
+        "benchRet": 0.03650332790417332,
+        "excess": -0.3443825699485348,
+        "correct": false
+      },
+      {
+        "date": "2026-07-09",
+        "symbol": "META",
+        "side": "sell",
+        "exitPrice": 721.3099975585938,
+        "ret": 0.14315464418728974,
+        "benchRet": 0.03650332790417332,
+        "excess": -0.10665131628311642,
+        "correct": false
+      },
+      {
+        "date": "2026-07-09",
+        "symbol": "HD",
+        "side": "sell",
+        "exitPrice": 285.7699890136719,
+        "ret": -0.15013167175940267,
+        "benchRet": 0.03650332790417332,
+        "excess": 0.186634999663576,
+        "correct": true
+      },
+      {
+        "date": "2026-07-09",
+        "symbol": "TSLA",
+        "side": "sell",
+        "exitPrice": 377.80999755859375,
+        "ret": -0.07069238985935111,
+        "benchRet": 0.03650332790417332,
+        "excess": 0.10719571776352443,
+        "correct": true
+      }
+    ]
+  }
+}
