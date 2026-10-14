@@ -110,6 +110,7 @@ const SYNC_TEXT = {
 function syncText() {
   if (sync.status.mode !== 'synced') return SYNC_TEXT[sync.status.mode] || '';
   return sync.otherRunning() && !claim ? 'Synced · clock running on your other device' : 'Synced across your devices';
+  // (login state is shown on the Security desk)
 }
 function renderHeader() {
   $('syncBadge').textContent = syncText();

@@ -146,13 +146,15 @@ The Alpaca adapter stays in `src/brokers/` for later, if real order placement is
 
 ## Server sync and login (Vercel)
 
-The fund is stored on the server so every device sees the same desk. Two settings in Vercel:
+The fund is stored on the server so every device sees the same desk.
 
-1. **Storage**: project → Storage → create an **Upstash Redis** database (free) → connect it to
-   this project. Vercel adds `KV_REST_API_URL` and `KV_REST_API_TOKEN` itself.
-2. **Password**: project → Settings → Environment Variables → add `APP_PASSWORD`.
+1. **Storage** (needed for sync): project → Storage → create an **Upstash Redis** database (free)
+   → connect it to this project. Vercel adds `KV_REST_API_URL` and `KV_REST_API_TOKEN` itself.
+2. **Password** (optional, off for now): project → Settings → Environment Variables → add
+   `APP_PASSWORD`. Without it the fund syncs with no login, open to anyone with the address.
 
-Then redeploy. Without both, the API answers 503 and the app keeps the fund in the browser.
+Redeploy after changing either. Without storage the API answers 503 and the app keeps the fund
+in the browser.
 
 - `api/fund.js` (GET full or `?meta=1`, PUT with revision), `api/login.js`, `api/logout.js`
 - `server/handlers.js`, `server/store.js` (compare-and-set on a revision number),

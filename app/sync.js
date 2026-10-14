@@ -37,7 +37,7 @@ function deviceId() {
 
 export function createSync({ validate }) {
   const me = deviceId();
-  const s = { mode: 'checking', rev: 0, owner: null, leaseUntil: 0, saving: false, queued: false, lastError: '' };
+  const s = { mode: 'checking', rev: 0, owner: null, leaseUntil: 0, saving: false, queued: false, lastError: '', open: false };
 
   async function api(method, path, body) {
     const r = await fetch(path, { method, credentials: 'same-origin', headers: body ? { 'Content-Type': 'application/json' } : {}, body: body ? JSON.stringify(body) : undefined });
@@ -54,7 +54,7 @@ export function createSync({ validate }) {
     if (r.status === 503 || r.status === 404) { s.mode = 'local'; s.lastError = r.data?.error || 'not-configured'; return {}; }
     if (r.status === 401) { s.mode = 'login'; return {}; }
     if (r.status !== 200) { s.mode = 'error'; s.lastError = r.data?.detail || r.data?.error || `HTTP ${r.status}`; return {}; }
-    Object.assign(s, { mode: 'synced', rev: r.data.rev, owner: r.data.owner, leaseUntil: r.data.leaseUntil });
+    Object.assign(s, { mode: 'synced', rev: r.data.rev, owner: r.data.owner, leaseUntil: r.data.leaseUntil, open: !!r.data.open });
     if (!r.data.state) return { seed: true };
     const state = await unpack(r.data.state);
     return validate(state) ? { state } : { seed: true };

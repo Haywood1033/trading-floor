@@ -13,23 +13,24 @@ function send(res, status, body, headers = {}) {
   res.end(JSON.stringify(body));
 }
 
-// Both storage and a password are required; without either, the app stays local-only.
+// Storage is required for sync. The password is optional: without APP_PASSWORD the fund is
+// open to anyone with the site's address (the app says so on the Security desk).
 function setup(env) {
   const cfg = storeConfig(env);
   if (!cfg) return { error: 'storage-not-configured' };
-  if (!env.APP_PASSWORD) return { error: 'password-not-set' };
-  return { cfg, password: env.APP_PASSWORD };
+  return { cfg, password: env.APP_PASSWORD || null };
 }
 
 export async function fundHandler(req, res, { env = process.env, fetchImpl } = {}) {
   const s = setup(env);
   if (s.error) return send(res, 503, { error: s.error });
-  if (!isAuthed(req, s.password)) return send(res, 401, { error: 'login-required' });
+  if (s.password && !isAuthed(req, s.password)) return send(res, 401, { error: 'login-required' });
   const store = createStore({ ...s.cfg, fetchImpl });
+  const open = !s.password;
   try {
     if (req.method === 'GET') {
       const metaOnly = req.query?.meta === '1' || /[?&]meta=1/.test(req.url || '');
-      return send(res, 200, metaOnly ? await store.meta() : await store.get());
+      return send(res, 200, { ...(metaOnly ? await store.meta() : await store.get()), open });
     }
     if (req.method === 'PUT') {
       const b = typeof req.body === 'string' ? JSON.parse(req.body) : req.body || {};
@@ -50,6 +51,7 @@ export async function loginHandler(req, res, { env = process.env } = {}) {
   const s = setup(env);
   if (s.error) return send(res, 503, { error: s.error });
   if (req.method !== 'POST') return send(res, 405, { error: 'method-not-allowed' });
+  if (!s.password) return send(res, 200, { ok: true, open: true });
   const b = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : req.body || {};
   if (!checkPassword(b.password, s.password)) {
     await new Promise(r => setTimeout(r, 400)); // slow down guessing

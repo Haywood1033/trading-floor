@@ -10,10 +10,12 @@ export function renderSecurity(s, ui) {
   const d = ui.drafts;
   const sy = ui.sync?.status || { mode: 'local' };
   const SETUP = {
-    'storage-not-configured': 'Server storage is not connected yet. In Vercel: Storage → create an Upstash Redis database → connect it to this project.',
-    'password-not-set': 'Storage is connected but no password is set. In Vercel: Settings → Environment Variables → add APP_PASSWORD.'
+    'storage-not-configured': 'Server storage is not connected yet, so this fund lives in this browser only. To share it between devices, in Vercel: Storage → create an Upstash Redis database → connect it to this project, then redeploy.'
   };
-  const loginCard = sy.mode === 'synced'
+  const loginCard = sy.mode === 'synced' && sy.open
+    ? `<div class="statecard"><b>Sync <span class="flag-ok">On</span> · Login <span class="flag-warn">Off</span></b>
+        <span>The fund is stored on the server and shared by all your devices. There is no password, so anyone with this site's address can view and change the simulated fund. To require a password, add APP_PASSWORD in Vercel (Settings → Environment Variables) and redeploy.</span></div>`
+    : sy.mode === 'synced'
     ? `<div class="statecard"><b>Login and sync <span class="flag-ok">On</span></b>
         <span>The fund is stored on the server behind your password and shared by every device you sign in on. This device: ${esc(ui.sync.me)}.${ui.sync.otherRunning() ? ' The clock is currently running on another device.' : ''}</span>
         <div class="actions"><button class="btn" data-act="logout">Sign out on this device</button></div></div>`
