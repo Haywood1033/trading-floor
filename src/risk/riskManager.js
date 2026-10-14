@@ -6,7 +6,7 @@ import { DEFAULT_LIMITS } from './limits.js';
 
 const pct = v => (v * 100).toFixed(1) + '%';
 
-// ctx = { limits?, halted?, dayTradesUsed?, opensDayTrade? }
+// ctx = { limits?, halted?, dayTradesUsed?, opensDayTrade?, peakEquity? }
 // Returns { approved, checks: [{ id, ok, message }] }.
 export function evaluateOrder(order, snapshot, ctx = {}) {
   const limits = { ...DEFAULT_LIMITS, ...ctx.limits };
@@ -45,6 +45,11 @@ export function evaluateOrder(order, snapshot, ctx = {}) {
     const dayPct = before.equity / snapshot.startOfDayEquity - 1;
     add('dailyLoss', dayPct > limits.dailyLossLimitPct,
       `Day ${pct(dayPct)}; buys stop at ${pct(limits.dailyLossLimitPct)}`);
+
+    if (limits.maxDrawdownPct != null && ctx.peakEquity > 0) {
+      const dd = before.equity / ctx.peakEquity - 1;
+      add('drawdown', dd > -limits.maxDrawdownPct, `Drawdown ${pct(dd)}; buys stop at -${pct(limits.maxDrawdownPct)}`);
+    }
 
     add('cashFloor', after.cash >= limits.minCashPct * after.equity,
       `Cash after ${pct(after.cash / after.equity)} / min ${pct(limits.minCashPct)}`);

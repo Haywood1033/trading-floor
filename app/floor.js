@@ -2,10 +2,7 @@
 
 import * as D from './desk.js';
 import { TICKS_PER_DAY } from './sim.js';
-
-const cls = v => (v > 1e-9 ? 'up' : v < -1e-9 ? 'down' : 'muted');
-const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-const p1 = v => (v * 100).toFixed(1) + '%';
+import { esc, cls, p1, gauge, tierChip } from './ui.js';
 
 function spark(points, base) {
   const W = 300, H = 64, pad = 4;
@@ -66,7 +63,7 @@ function orderCard(s, o) {
       <span class="qty num"><button data-act="dec" data-id="${o.id}" aria-label="Decrease size">−</button><span>${D.fmtQty(o)}</span><button data-act="inc" data-id="${o.id}" aria-label="Increase size">+</button></span>
       <span class="num muted">~${D.usd(r.value)} @ ${D.usd(r.price, 2)}</span>
       <span class="spacer"></span>
-      <span class="muted" style="font-size:12px">${D.quantName(o.quantId)} · conf ${Math.round(o.confidence * 100)}%</span>
+      <span class="muted" style="font-size:12px">${D.quantName(o.quantId)}${o.confidence != null ? ` · conf ${Math.round(o.confidence * 100)}%` : ''}</span>
     </div>
     <div class="thesis">${esc(o.thesis)}</div>
     <div class="checks">${r.checks.filter(c => !c.ok || !['halted', 'valid'].includes(c.id)).map(c => `<span class="${c.ok ? 'ok' : 'bad'}">${c.ok ? '✓' : '✕'} ${esc(c.message)}</span>`).join('')}</div>
@@ -87,13 +84,6 @@ function queuePanel(s) {
     ${list.length ? list.map(o => orderCard(s, o)).join('') : `<div class="empty">${empty}</div>`}</section>`;
 }
 
-function gauge(label, cur, limit, fmt, note) {
-  const ratio = limit ? cur / limit : 0;
-  const lvl = ratio >= 1 ? 'bad' : ratio >= 0.85 ? 'warn' : '';
-  return `<div class="gauge"><div class="gtop"><span>${label}</span><span class="num">${fmt(cur)} / ${fmt(limit)}</span></div>
-    <div class="track"><div class="gfill ${lvl}" style="width:${Math.max(0, Math.min(1, ratio)) * 100}%"></div></div>${note ? `<div class="gnote">${note}</div>` : ''}</div>`;
-}
-
 function riskPanel(s) {
   const L = s.settings.limits, t = D.totals(s), snap = D.snapshot(s);
   const day = t.equity / s.startOfDayEquity - 1;
@@ -105,6 +95,7 @@ function riskPanel(s) {
     ${gauge('Largest stock position', big ? big.v / t.equity : 0, L.maxPositionPct, p1, big ? big.sym : 'No stock positions')}
     ${gauge('Tech exposure', tech, L.sectorLimits.Tech, p1)}
     ${gauge('Crypto exposure', t.crypto / t.equity, L.maxCryptoPct, p1)}
+    ${gauge('Drawdown from peak', Math.max(0, 1 - t.equity / s.peakEquity), L.maxDrawdownPct, p1, `Peak NAV ${D.usd(s.peakEquity)}.`)}
     <div class="gauge"><div class="gtop"><span>Cash floor</span><span class="num">${p1(t.cash / t.equity)} / min ${p1(L.minCashPct)}</span></div></div>
     <div class="gauge"><div class="gtop"><span>Max order</span><span class="num">${D.usd(L.maxOrderValue)}</span></div>
       <div class="gtop"><span>Auto-trade cap</span><span class="num">${D.usd(L.autoMaxOrderValue)}</span></div>
@@ -117,7 +108,7 @@ function benchPanel(s) {
   const rows = D.scoreboard(s).map(q => `<tr>
     <td><b>${q.name}</b><div class="qdesc">${esc(q.desc)}</div></td>
     <td class="num">${q.graded ? `${p1(q.hitRate)} <span class="muted">of ${q.graded}</span>` : `<span class="muted">0 graded</span>`}<div class="qdesc">${q.open} open call${q.open === 1 ? '' : 's'}</div></td>
-    <td><span class="tier ${q.tier}">${{ elite: 'Elite', allstar: 'All-Star', value: 'Value', unproven: 'Unproven' }[q.tier]}</span></td>
+    <td>${tierChip(q.tier)}</td>
     <td class="r"><div class="seg small" role="group" aria-label="${q.name} mode">${['live', 'paper', 'off'].map(m =>
       `<button data-act="qmode" data-q="${q.id}" data-v="${m}" aria-pressed="${q.mode === m}">${m}</button>`).join('')}</div></td></tr>`).join('');
   return `<section class="panel"><h2>Quant bench <small>calls graded after 63 trading days vs SPY</small></h2>

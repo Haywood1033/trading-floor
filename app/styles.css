@@ -49,6 +49,7 @@ header.bar { position: sticky; top: 0; z-index: 5; display: flex; flex-wrap: wra
 .nav a[aria-current="page"] { background: var(--panel); color: var(--fg); box-shadow: inset 3px 0 0 var(--accent); }
 .nav a small { font-family: var(--font-body); font-size: 10px; letter-spacing: .04em; color: var(--muted); font-weight: 500; text-transform: none; }
 .nav .badge { background: var(--accent); color: var(--accent-ink); border-radius: 9px; padding: 0 7px; font-family: var(--font-mono); font-size: 11px; }
+main:focus { outline: none; }
 main { padding: 16px; display: grid; gap: 12px; align-content: start; min-width: 0; }
 .foot { border-top: 1px solid var(--line); padding: 12px 16px; display: flex; gap: 12px; flex-wrap: wrap; align-items: center; justify-content: space-between; font-size: 12px; color: var(--muted); }
 @media (max-width: 760px) {
@@ -145,3 +146,59 @@ td.r, th.r { text-align: right; }
 .modal .box { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 20px; max-width: 440px; display: grid; gap: 12px; }
 .modal h3 { margin: 0; font-family: var(--font-display); font-size: 22px; letter-spacing: .06em; text-transform: uppercase; }
 .modal p { margin: 0; color: var(--muted); }
+
+/* Shared desk pieces */
+.desk-head { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: baseline; justify-content: space-between; }
+.desk-head h1 { font-family: var(--font-display); font-size: 26px; letter-spacing: .06em; text-transform: uppercase; margin: 0; }
+.desk-head p { margin: 0; color: var(--muted); max-width: 70ch; }
+.tiles { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); }
+.tile { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 12px 14px; display: grid; gap: 2px; }
+.tile .label { font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.tile .value { font-family: var(--font-mono); font-size: 20px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.tile .sub { font-size: 12px; color: var(--muted); }
+.cols-2 { display: grid; gap: 12px; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; }
+@media (max-width: 1000px) { .cols-2 { grid-template-columns: minmax(0, 1fr); } }
+.bars { display: grid; gap: 8px; padding: 12px 14px; }
+.barrow { display: grid; grid-template-columns: 90px minmax(0, 1fr) 110px 80px; gap: 10px; align-items: center; font-size: 13px; }
+.barrow .num { text-align: right; }
+.capmark { position: absolute; top: -3px; bottom: -3px; width: 2px; background: var(--fg); opacity: .5; }
+@media (max-width: 760px) { .barrow { grid-template-columns: 70px minmax(0, 1fr) 90px; } .barrow > :last-child { display: none; } }
+.chart { padding: 10px 14px 12px; display: grid; grid-template-columns: 52px minmax(0, 1fr); grid-template-rows: 200px auto auto; column-gap: 6px; }
+.chart .yaxis { position: relative; font-family: var(--font-mono); font-size: 11px; color: var(--muted); }
+.chart .yaxis span { position: absolute; right: 0; transform: translateY(-50%); }
+.chart svg { width: 100%; height: 200px; display: block; }
+.chart .xaxis { grid-column: 2; display: flex; justify-content: space-between; font-family: var(--font-mono); font-size: 11px; color: var(--muted); padding-top: 4px; }
+.chart .legend { grid-column: 2; }
+.legend { display: flex; gap: 14px; font-size: 12px; color: var(--muted); padding-top: 4px; }
+.legend i { display: inline-block; width: 12px; height: 3px; margin-right: 6px; vertical-align: 3px; border-radius: 2px; }
+.form { display: grid; gap: 12px; padding: 12px 14px; }
+.field { display: grid; grid-template-columns: minmax(0, 1fr) 140px; gap: 4px 12px; align-items: center; }
+.field label { font-weight: 500; }
+.field .hint { grid-column: 1 / -1; font-size: 12px; color: var(--muted); }
+.field input, .field select, .ticket input, .ticket select, .search input, .search select {
+  font: inherit; color: var(--fg); background: var(--panel-2); border: 1px solid var(--line); border-radius: 4px; padding: 6px 8px; width: 100%; }
+.field input:focus, .ticket input:focus, .ticket select:focus, .search input:focus, .search select:focus { outline: 2px solid var(--accent); outline-offset: 0; }
+.checkrow { display: flex; flex-wrap: wrap; gap: 6px 14px; }
+.checkrow label { white-space: nowrap; display: inline-flex; gap: 6px; align-items: center; font-size: 13px; }
+.ticket { display: grid; gap: 10px; padding: 12px 14px; grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: end; }
+.ticket > div { display: grid; gap: 4px; font-size: 12px; color: var(--muted); }
+.ticket .full { grid-column: 1 / -1; }
+@media (max-width: 600px) { .ticket { grid-template-columns: minmax(0, 1fr); } }
+.search { display: flex; flex-wrap: wrap; gap: 8px; padding: 10px 14px; border-bottom: 1px solid var(--line); }
+.search input { flex: 1 1 200px; width: auto; } .search select { width: auto; }
+.ostatus { display: inline-block; font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; padding: 1px 6px; border-radius: 3px; border: 1px solid currentColor; }
+.ostatus.filled { color: var(--up); } .ostatus.pending { color: var(--accent); } .ostatus.rejected, .ostatus.cancelled { color: var(--down); } .ostatus.expired { color: var(--muted); }
+.statecard { display: grid; gap: 4px; padding: 12px 14px; border-top: 1px solid var(--line); }
+.statecard:first-of-type { border-top: 0; }
+.statecard b { font-size: 14px; }
+.statecard span { font-size: 13px; color: var(--muted); }
+.flag-ok { color: var(--up); font-weight: 600; } .flag-warn { color: var(--warn); font-weight: 600; } .flag-off { color: var(--muted); font-weight: 600; }
+.brief { padding: 12px 14px; display: grid; gap: 8px; max-width: 80ch; }
+.brief p { margin: 0; }
+.rules { margin: 0; padding: 12px 14px 12px 30px; color: var(--muted); display: grid; gap: 4px; font-size: 13px; }
+.rowbtn { padding: 3px 9px; font-size: 12px; }
+
+.toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: 24px; z-index: 9; max-width: min(560px, calc(100vw - 32px));
+  background: var(--panel); border: 1px solid var(--line); border-left: 4px solid var(--up); border-radius: 6px; padding: 10px 14px; box-shadow: 0 6px 24px rgba(0,0,0,.35); }
+.toast.bad { border-left-color: var(--down); }
+@media (max-width: 760px) { .toast { bottom: 80px; } }
