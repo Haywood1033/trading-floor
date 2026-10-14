@@ -72,7 +72,8 @@ export function createAlpacaBroker({
         equity: +a.equity,
         buyingPower: +a.buying_power,
         lastEquity: +a.last_equity, // equity at the previous close: start-of-day for the loss cap
-        dayTradeCount: +a.daytrade_count,
+        dayTradeCount: a.daytrade_count != null ? +a.daytrade_count : null, // paper accounts may omit it
+        optionsLevel: a.options_trading_level ?? null,
         tradingBlocked: !!a.trading_blocked
       };
     },

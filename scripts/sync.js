@@ -18,7 +18,7 @@ const day = s.equity / snap.startOfDayEquity - 1;
 console.log(`${broker.name}  market ${clock.isOpen ? 'OPEN' : 'closed'}`);
 console.log(`Equity ${usd(s.equity)}  day ${pct(day)}  cash ${usd(s.cash)} (${pct(s.cash / s.equity)})`);
 console.log(`Stocks ${usd(s.stocks)}  crypto ${usd(s.crypto)} (${pct(s.crypto / s.equity)} / ${pct(DEFAULT_LIMITS.maxCryptoPct)})`);
-console.log(`Day trades used (5-day): ${snap.dayTradesUsed}`);
+console.log(`Day trades used (5-day): ${snap.dayTradesUsed ?? 'not reported'}`);
 console.log('');
 const rows = Object.entries(snap.positions).sort((a, b) => b[1].qty * b[1].price - a[1].qty * a[1].price);
 if (!rows.length) console.log('No positions yet.');

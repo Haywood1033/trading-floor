@@ -9,9 +9,9 @@
   },
   "scripts": {
     "test": "node --test test/*.test.js",
-    "sync": "node scripts/sync.js",
-    "review": "node scripts/review.js",
-    "quants": "node scripts/quants.js",
-    "grade": "node scripts/grade.js"
+    "sync": "NODE_USE_ENV_PROXY=1 node scripts/sync.js",
+    "review": "NODE_USE_ENV_PROXY=1 node scripts/review.js",
+    "quants": "NODE_USE_ENV_PROXY=1 node scripts/quants.js",
+    "grade": "NODE_USE_ENV_PROXY=1 node scripts/grade.js"
   }
 }
