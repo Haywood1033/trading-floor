@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-16T23:46:19.100Z",
+  "generatedAt": "2026-10-20T00:31:49.043Z",
   "source": "Simulated paper account, Yahoo daily prices",
   "account": {
     "equity": 100000,
@@ -49,7 +49,7 @@
     },
     {
       "symbol": "LLY",
-      "score": 0.4030369499214832,
+      "score": 0.4030368456657507,
       "price": 1257.030029296875,
       "above200": true,
       "eligible": true,
@@ -57,7 +57,7 @@
     },
     {
       "symbol": "GOOGL",
-      "score": 0.38721769847196286,
+      "score": 0.3872177830129002,
       "price": 340.5899963378906,
       "above200": true,
       "eligible": true,
@@ -73,7 +73,7 @@
     },
     {
       "symbol": "NVDA",
-      "score": 0.22262966150615648,
+      "score": 0.22262976549628855,
       "price": 214.1300048828125,
       "above200": true,
       "eligible": true,
@@ -153,15 +153,15 @@
     },
     {
       "symbol": "META",
-      "score": -0.04663837915367053,
-      "price": 709.3250122070312,
+      "score": -0.0466384605221517,
+      "price": 709.3300170898438,
       "above200": true,
       "eligible": false,
       "why": "12-1 return under 10%"
     },
     {
       "symbol": "COST",
-      "score": -0.05847634273915281,
+      "score": -0.05847628221355983,
       "price": 989.1099853515625,
       "above200": true,
       "eligible": false,
@@ -177,7 +177,7 @@
     },
     {
       "symbol": "HD",
-      "score": -0.19887533069892183,
+      "score": -0.19887526595327687,
       "price": 309.6300048828125,
       "above200": false,
       "eligible": false,
