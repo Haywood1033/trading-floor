@@ -78,5 +78,21 @@
     "benchEntry": 778.010009765625,
     "status": "open",
     "result": null
+  },
+  {
+    "id": "mom-NVDA-buy-2026-10-22",
+    "quantId": "mom",
+    "symbol": "NVDA",
+    "side": "buy",
+    "assetClass": "stock",
+    "confidence": 0.55,
+    "thesis": "Momentum leader: #6 of 19 on 12-1 month return (+24%), above its 200-day average. Buy 23 (~$4979) to reach ~5% of the account.",
+    "issuedOn": "2026-10-22",
+    "horizonDays": 63,
+    "entryPrice": 216.47000122070312,
+    "benchmark": "SPY",
+    "benchEntry": 769.0499877929688,
+    "status": "open",
+    "result": null
   }
 ]
