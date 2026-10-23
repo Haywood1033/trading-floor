@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-22T00:07:15.887Z",
+  "generatedAt": "2026-10-23T00:04:54.024Z",
   "source": "Simulated paper account, Yahoo daily prices",
   "account": {
     "equity": 100000,
@@ -33,152 +33,152 @@
   "momentum": [
     {
       "symbol": "XLE",
-      "score": 0.4943208373044805,
-      "price": 67.97000122070312,
+      "score": 0.4625726838367006,
+      "price": 68.16000366210938,
       "above200": true,
       "eligible": true,
       "why": "qualifies"
     },
     {
       "symbol": "LLY",
-      "score": 0.4601306849522573,
-      "price": 1283.6600341796875,
+      "score": 0.45559715051339555,
+      "price": 1270.75,
       "above200": true,
       "eligible": true,
       "why": "qualifies"
     },
     {
       "symbol": "XOM",
-      "score": 0.4512470351610611,
-      "price": 177.86000061035156,
+      "score": 0.4490670146992013,
+      "price": 178.08999633789062,
       "above200": true,
       "eligible": true,
       "why": "qualifies"
     },
     {
       "symbol": "GOOGL",
-      "score": 0.4050262091258128,
-      "price": 340.2799987792969,
+      "score": 0.3723378093565233,
+      "price": 334.760009765625,
       "above200": false,
       "eligible": false,
       "why": "below its 200-day average"
     },
     {
       "symbol": "AAPL",
-      "score": 0.3485758860211039,
-      "price": 339.5,
+      "score": 0.30035482290741733,
+      "price": 343.989990234375,
       "above200": true,
       "eligible": true,
       "why": "qualifies"
     },
     {
       "symbol": "NVDA",
-      "score": 0.2439951026838567,
-      "price": 216.47000122070312,
+      "score": 0.2561231004028428,
+      "price": 221.97000122070312,
       "above200": true,
       "eligible": true,
       "why": "qualifies"
     },
     {
       "symbol": "QQQ",
-      "score": 0.23351022971483526,
-      "price": 717.6300048828125,
-      "above200": true,
-      "eligible": true,
-      "why": "qualifies"
-    },
-    {
-      "symbol": "AMZN",
-      "score": 0.21315255516323872,
-      "price": 262.6300048828125,
-      "above200": true,
-      "eligible": true,
-      "why": "qualifies"
-    },
-    {
-      "symbol": "JPM",
-      "score": 0.19988902598031832,
-      "price": 335.260009765625,
+      "score": 0.22800138178401563,
+      "price": 725.2000122070312,
       "above200": true,
       "eligible": true,
       "why": "qualifies"
     },
     {
       "symbol": "XLV",
-      "score": 0.1993733203884085,
-      "price": 179.82000732421875,
+      "score": 0.19296176930909348,
+      "price": 178.94000244140625,
+      "above200": true,
+      "eligible": true,
+      "why": "qualifies"
+    },
+    {
+      "symbol": "AMZN",
+      "score": 0.17784553196525366,
+      "price": 262.3699951171875,
+      "above200": true,
+      "eligible": true,
+      "why": "qualifies"
+    },
+    {
+      "symbol": "JPM",
+      "score": 0.14045506628350468,
+      "price": 335.19000244140625,
       "above200": true,
       "eligible": true,
       "why": "qualifies"
     },
     {
       "symbol": "XLF",
-      "score": 0.0881849484822248,
-      "price": 55.720001220703125,
-      "above200": true,
-      "eligible": false,
-      "why": "12-1 return under 10%"
-    },
-    {
-      "symbol": "UNH",
-      "score": 0.08696990290366502,
-      "price": 419.260009765625,
+      "score": 0.05444477874629072,
+      "price": 56.040000915527344,
       "above200": true,
       "eligible": false,
       "why": "12-1 return under 10%"
     },
     {
       "symbol": "AVGO",
-      "score": 0.04587778088061434,
-      "price": 334.3699951171875,
+      "score": 0.05157043008121187,
+      "price": 337.79998779296875,
       "above200": false,
       "eligible": false,
       "why": "below its 200-day average"
     },
     {
-      "symbol": "META",
-      "score": 0.03744399707884005,
-      "price": 694.25,
+      "symbol": "UNH",
+      "score": 0.0504847590723041,
+      "price": 417,
       "above200": true,
       "eligible": false,
       "why": "12-1 return under 10%"
     },
     {
       "symbol": "WMT",
-      "score": 0.0057049845127568055,
-      "price": 117.8499984741211,
+      "score": 0.03733930156921339,
+      "price": 117.80000305175781,
       "above200": false,
       "eligible": false,
       "why": "below its 200-day average"
     },
     {
+      "symbol": "META",
+      "score": 0.009463067487946786,
+      "price": 697.52001953125,
+      "above200": true,
+      "eligible": false,
+      "why": "12-1 return under 10%"
+    },
+    {
       "symbol": "MSFT",
-      "score": -0.015271162114102843,
-      "price": 531.8699951171875,
+      "score": -0.028430490101739814,
+      "price": 532.9500122070312,
       "above200": true,
       "eligible": false,
       "why": "12-1 return under 10%"
     },
     {
       "symbol": "COST",
-      "score": -0.03482516605860908,
-      "price": 994.6099853515625,
+      "score": -0.03359898333311362,
+      "price": 998.3099975585938,
       "above200": true,
       "eligible": false,
       "why": "12-1 return under 10%"
     },
     {
       "symbol": "TSLA",
-      "score": -0.1457057888993012,
-      "price": 373.7099914550781,
+      "score": -0.1531636231390402,
+      "price": 386.4700012207031,
       "above200": false,
       "eligible": false,
       "why": "below its 200-day average"
     },
     {
       "symbol": "HD",
-      "score": -0.2201675334763865,
-      "price": 315.1099853515625,
+      "score": -0.19258113318876946,
+      "price": 314.1400146484375,
       "above200": false,
       "eligible": false,
       "why": "below its 200-day average"
@@ -190,13 +190,13 @@
       "symbol": "XLE",
       "side": "buy",
       "qty": 73,
-      "price": 67.97000122070312,
+      "price": 68.16000366210938,
       "sector": "Energy",
       "assetClass": "stock",
       "strength": 1,
       "confidence": 0.55,
       "horizon": "3m",
-      "thesis": "Momentum leader: #1 of 19 on 12-1 month return (+49%), above its 200-day average. Buy 73 (~$4962) to reach ~5% of the account.",
+      "thesis": "Momentum leader: #1 of 19 on 12-1 month return (+46%), above its 200-day average. Buy 73 (~$4976) to reach ~5% of the account.",
       "resizedFrom": null,
       "newCall": false,
       "risk": {
@@ -215,7 +215,7 @@
           {
             "id": "maxOrderValue",
             "ok": true,
-            "message": "Order value $4962 / $5000"
+            "message": "Order value $4976 / $5000"
           },
           {
             "id": "dailyLoss",
@@ -240,13 +240,13 @@
       "symbol": "LLY",
       "side": "buy",
       "qty": 3,
-      "price": 1283.6600341796875,
+      "price": 1270.75,
       "sector": "Health",
       "assetClass": "stock",
       "strength": 0.8,
       "confidence": 0.55,
       "horizon": "3m",
-      "thesis": "Momentum leader: #2 of 19 on 12-1 month return (+46%), above its 200-day average. Buy 3 (~$3851) to reach ~5% of the account.",
+      "thesis": "Momentum leader: #2 of 19 on 12-1 month return (+46%), above its 200-day average. Buy 3 (~$3812) to reach ~5% of the account.",
       "resizedFrom": null,
       "newCall": false,
       "risk": {
@@ -265,7 +265,7 @@
           {
             "id": "maxOrderValue",
             "ok": true,
-            "message": "Order value $3851 / $5000"
+            "message": "Order value $3812 / $5000"
           },
           {
             "id": "dailyLoss",
@@ -275,12 +275,12 @@
           {
             "id": "cashFloor",
             "ok": true,
-            "message": "Cash after 96.1% / min 5.0%"
+            "message": "Cash after 96.2% / min 5.0%"
           },
           {
             "id": "positionSize",
             "ok": true,
-            "message": "LLY 3.9% / 10.0%"
+            "message": "LLY 3.8% / 10.0%"
           }
         ]
       }
@@ -290,13 +290,13 @@
       "symbol": "XOM",
       "side": "buy",
       "qty": 28,
-      "price": 177.86000061035156,
+      "price": 178.08999633789062,
       "sector": "Energy",
       "assetClass": "stock",
       "strength": 0.6,
       "confidence": 0.55,
       "horizon": "3m",
-      "thesis": "Momentum leader: #3 of 19 on 12-1 month return (+45%), above its 200-day average. Buy 28 (~$4980) to reach ~5% of the account.",
+      "thesis": "Momentum leader: #3 of 19 on 12-1 month return (+45%), above its 200-day average. Buy 28 (~$4987) to reach ~5% of the account.",
       "resizedFrom": null,
       "newCall": false,
       "risk": {
@@ -315,7 +315,7 @@
           {
             "id": "maxOrderValue",
             "ok": true,
-            "message": "Order value $4980 / $5000"
+            "message": "Order value $4987 / $5000"
           },
           {
             "id": "dailyLoss",
@@ -340,13 +340,13 @@
       "symbol": "AAPL",
       "side": "buy",
       "qty": 14,
-      "price": 339.5,
+      "price": 343.989990234375,
       "sector": "Tech",
       "assetClass": "stock",
       "strength": 0.4,
       "confidence": 0.55,
       "horizon": "3m",
-      "thesis": "Momentum leader: #5 of 19 on 12-1 month return (+35%), above its 200-day average. Buy 14 (~$4753) to reach ~5% of the account.",
+      "thesis": "Momentum leader: #5 of 19 on 12-1 month return (+30%), above its 200-day average. Buy 14 (~$4816) to reach ~5% of the account.",
       "resizedFrom": null,
       "newCall": false,
       "risk": {
@@ -365,7 +365,7 @@
           {
             "id": "maxOrderValue",
             "ok": true,
-            "message": "Order value $4753 / $5000"
+            "message": "Order value $4816 / $5000"
           },
           {
             "id": "dailyLoss",
@@ -394,16 +394,16 @@
       "quantId": "mom",
       "symbol": "NVDA",
       "side": "buy",
-      "qty": 23,
-      "price": 216.47000122070312,
+      "qty": 22,
+      "price": 221.97000122070312,
       "sector": "Tech",
       "assetClass": "stock",
       "strength": 0.19999999999999996,
       "confidence": 0.55,
       "horizon": "3m",
-      "thesis": "Momentum leader: #6 of 19 on 12-1 month return (+24%), above its 200-day average. Buy 23 (~$4979) to reach ~5% of the account.",
+      "thesis": "Momentum leader: #6 of 19 on 12-1 month return (+26%), above its 200-day average. Buy 22 (~$4883) to reach ~5% of the account.",
       "resizedFrom": null,
-      "newCall": true,
+      "newCall": false,
       "risk": {
         "approved": true,
         "checks": [
@@ -420,7 +420,7 @@
           {
             "id": "maxOrderValue",
             "ok": true,
-            "message": "Order value $4979 / $5000"
+            "message": "Order value $4883 / $5000"
           },
           {
             "id": "dailyLoss",
@@ -430,17 +430,17 @@
           {
             "id": "cashFloor",
             "ok": true,
-            "message": "Cash after 95.0% / min 5.0%"
+            "message": "Cash after 95.1% / min 5.0%"
           },
           {
             "id": "positionSize",
             "ok": true,
-            "message": "NVDA 5.0% / 10.0%"
+            "message": "NVDA 4.9% / 10.0%"
           },
           {
             "id": "sectorExposure",
             "ok": true,
-            "message": "Tech 5.0% / 40.0%"
+            "message": "Tech 4.9% / 40.0%"
           }
         ]
       }
