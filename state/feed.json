@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-23T23:55:25.299Z",
+  "generatedAt": "2026-10-27T00:41:03.457Z",
   "source": "Simulated paper account, Yahoo daily prices",
   "account": {
     "equity": 100000,
@@ -41,7 +41,7 @@
     },
     {
       "symbol": "LLY",
-      "score": 0.4639342233475605,
+      "score": 0.46393411267343687,
       "price": 1273.4599609375,
       "above200": true,
       "eligible": true,
@@ -57,7 +57,7 @@
     },
     {
       "symbol": "GOOGL",
-      "score": 0.36378212677374644,
+      "score": 0.3637822096685077,
       "price": 320.2099914550781,
       "above200": false,
       "eligible": false,
@@ -65,15 +65,15 @@
     },
     {
       "symbol": "AAPL",
-      "score": 0.3045499258093418,
-      "price": 347.7250061035156,
+      "score": 0.3045497712000669,
+      "price": 347.7300109863281,
       "above200": true,
       "eligible": true,
       "why": "qualifies"
     },
     {
       "symbol": "NVDA",
-      "score": 0.24871336854622617,
+      "score": 0.24871347448978254,
       "price": 210.9600067138672,
       "above200": true,
       "eligible": true,
@@ -89,7 +89,7 @@
     },
     {
       "symbol": "XLV",
-      "score": 0.18325962805432616,
+      "score": 0.18325975382040927,
       "price": 179.27999877929688,
       "above200": true,
       "eligible": true,
@@ -129,7 +129,7 @@
     },
     {
       "symbol": "XLF",
-      "score": 0.05645391052131776,
+      "score": 0.05645398859878781,
       "price": 55.900001525878906,
       "above200": true,
       "eligible": false,
@@ -161,7 +161,7 @@
     },
     {
       "symbol": "COST",
-      "score": -0.04548573888396146,
+      "score": -0.0454856768535965,
       "price": 1003.3200073242188,
       "above200": true,
       "eligible": false,
@@ -177,7 +177,7 @@
     },
     {
       "symbol": "HD",
-      "score": -0.2275647017107626,
+      "score": -0.22756463939127847,
       "price": 319.8299865722656,
       "above200": false,
       "eligible": false,
@@ -340,7 +340,7 @@
       "symbol": "AAPL",
       "side": "buy",
       "qty": 14,
-      "price": 347.7250061035156,
+      "price": 347.7300109863281,
       "sector": "Tech",
       "assetClass": "stock",
       "strength": 0.4,
