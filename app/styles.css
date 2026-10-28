@@ -60,6 +60,7 @@ main { padding: 16px; display: grid; gap: 12px; align-content: start; min-width:
   .nav a small { display: none; }
   .nav a[aria-current="page"] { box-shadow: inset 0 -3px 0 var(--accent); }
   body { padding-bottom: 64px; }
+  html { scroll-padding-bottom: 76px; }
   header.bar { position: static; }
 }
 
@@ -208,3 +209,5 @@ td.r, th.r { text-align: right; }
 .syncbadge.error, .syncbadge.login { color: var(--warn); }
 #loginPw { font: inherit; color: var(--fg); background: var(--panel-2); border: 1px solid var(--line); border-radius: 4px; padding: 8px 10px; }
 #loginPw:focus { outline: 2px solid var(--accent); outline-offset: 0; }
+
+tr.hl td { background: color-mix(in srgb, var(--accent) 8%, transparent); }

@@ -12,6 +12,7 @@ import { renderSecurity } from './desks/security.js';
 import { renderReports } from './desks/reports.js';
 import { TIER_LABEL } from './ui.js';
 import { createSync } from './sync.js';
+import { loadHistory } from './replay.js';
 
 const KEY = 'tradingFloor.v1';
 const $ = id => document.getElementById(id);
@@ -27,7 +28,8 @@ const DESKS = [
 ];
 
 // Screen-only state: unsaved form input (drafts), filters, messages. Not saved.
-const ui = { drafts: {}, blotterFilter: 'all', formError: '', ticketMsg: null, sync: null };
+const ui = { drafts: {}, blotterFilter: 'all', formError: '', ticketMsg: null, sync: null, history: null, backtest: null, marketError: '' };
+export const DEFAULT_START = '2020-01-02'; // includes the 2020 crash, 2022 bear market and recoveries
 const sync = createSync({ validate: s => !!s && s.version === D.STATE_VERSION });
 ui.sync = sync;
 
@@ -36,14 +38,18 @@ function startDate() {
   const wd = new Date(d + 'T12:00:00Z').getUTCDay();
   return wd === 0 || wd === 6 ? nextBusinessDay(d) : d;
 }
+// A new fund: on real history when it loaded, otherwise the synthetic market.
+function newFund({ start = DEFAULT_START, capital = D.DEFAULT_CAPITAL } = {}) {
+  return D.market() ? D.freshReplayState({ startDate: start, capital }) : D.freshState({ startDate: startDate(), capital });
+}
 function load() {
   try {
     const s = JSON.parse(localStorage.getItem(KEY));
-    if (s && s.version === D.STATE_VERSION) return D.migrate(s);
+    if (s && s.version === D.STATE_VERSION && (s.sim.mode !== 'replay' || D.market())) return D.migrate(s);
   } catch { /* fall through to a fresh fund */ }
-  return D.freshState({ startDate: startDate() });
+  return newFund();
 }
-let state = load();
+let state = null;
 let dirty = 0;
 // Local copy: always kept, so the app opens instantly and works offline.
 function save(force) {
@@ -105,7 +111,7 @@ function desk() {
 }
 
 const SYNC_TEXT = {
-  checking: 'Connecting…', local: 'Saved in this browser only', login: 'Signed out', error: 'Sync problem'
+  checking: 'Connecting…', local: 'This browser only', login: 'Signed out', error: 'Sync problem'
 };
 function syncText() {
   if (sync.status.mode !== 'synced') return SYNC_TEXT[sync.status.mode] || '';
@@ -118,8 +124,9 @@ function renderHeader() {
   $('syncNote').textContent = sync.status.mode === 'synced' ? 'Saved on the server and shared by your devices.' : 'Saved in this browser only.';
   const open = D.marketOpen(state);
   $('mktDot').className = 'dot' + (open && state.settings.speed ? '' : ' off');
-  $('mktState').textContent = !open ? 'Closed' : state.settings.speed ? 'Market open' : 'Paused';
-  $('simDate').textContent = new Date(state.sim.day + 'T12:00:00Z').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' });
+  $('mktState').textContent = state.sim.ended ? 'Replay ended' : !open ? 'Closed' : state.settings.speed ? 'Market open' : 'Paused';
+  $('simDate').textContent = new Date(state.sim.day + 'T12:00:00Z').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', ...(D.isReplay(state) ? { year: 'numeric' } : {}), timeZone: 'UTC' });
+  $('marketKind').textContent = D.isReplay(state) ? (state.sim.ended ? 'Replay caught up to today' : 'Real history') : 'Synthetic market' + (ui.marketError ? ' (real history unavailable)' : '');
   $('clock').textContent = clockLabel(state.sim);
   for (const b of $('speedSeg').children) b.setAttribute('aria-pressed', String(+b.dataset.v === state.settings.speed));
   for (const b of $('modeSeg').children) b.setAttribute('aria-pressed', String(b.dataset.v === state.settings.mode));
@@ -190,6 +197,20 @@ function act(el) {
     case 'logout': sync.logout().then(() => showLogin()); return;
     case 'useLocal': $('login').hidden = true; sync.status.mode = 'local'; schedule(); render(); return;
     case 'skip': D.skipToClose(state); break;
+    case 'skipDays': D.skipDays(state, +v); break;
+    case 'preset': ui.drafts['nf-date'] = v; break;
+    case 'btPeriod': ui.btPeriod = v; break;
+    case 'newFund': {
+      const start = ui.drafts['nf-date'] || DEFAULT_START, cap = Number(ui.drafts['nf-cap'] ?? D.DEFAULT_CAPITAL);
+      if (!(cap >= 100 && cap <= 10_000_000)) { ui.formError = 'Starting capital must be between $100 and $10,000,000.'; break; }
+      if (D.market() && (start < ui.history.earliest || start > ui.history.latest)) { ui.formError = `Pick a start date between ${ui.history.earliest} and ${ui.history.latest}.`; break; }
+      ui.formError = '';
+      confirmBox('Start a new fund?', `This replaces the current fund (positions, orders, call history and log) with $${cap.toLocaleString('en-US')} cash on ${start}.`, 'Start new fund', () => {
+        state = newFund({ start, capital: cap }); D.openDay(state); claim = true;
+        delete ui.drafts['nf-date']; delete ui.drafts['nf-cap']; schedule();
+      });
+      return;
+    }
     case 'mode': D.setMode(state, v); break;
     case 'qmode': D.setQuantMode(state, el.dataset.q, v); break;
     case 'approve': report(D.approve(state, id)); break;
@@ -223,7 +244,7 @@ function act(el) {
       break;
     }
     case 'export': exportFund(); return;
-    case 'reset': confirmBox('Reset the simulation?', `This deletes the simulated fund in this browser: positions, orders, call history and the log. It starts again with $${D.DEFAULT_CAPITAL.toLocaleString('en-US')} cash.`, 'Reset', () => { try { localStorage.removeItem(KEY); } catch { /* ignore */ } state = D.freshState({ startDate: startDate() }); D.openDay(state); claim = true; schedule(); }); return;
+    case 'reset': location.hash = '#security'; return;
     case 'modalOk': $('modal').hidden = true; if (pendingConfirm) pendingConfirm(); pendingConfirm = null; break;
     case 'modalCancel': $('modal').hidden = true; pendingConfirm = null; return;
     default: return;
@@ -295,6 +316,18 @@ window.addEventListener('hashchange', () => { ui.formError = ''; ui.ticketMsg = 
 document.addEventListener('visibilitychange', () => { if (document.hidden) { save(true); pushNow(); } else pollRemote(); });
 window.addEventListener('pagehide', () => { save(true); pushNow(); });
 
+async function loadMarket() {
+  try {
+    const { index, hist } = await loadHistory();
+    D.setMarket(hist);
+    const { earliestStart } = await import('./replay.js');
+    ui.history = { earliest: earliestStart(hist), latest: hist.dates.at(-1), updated: index.updated };
+  } catch (e) {
+    ui.marketError = e.message || 'could not load';
+  }
+  try { ui.backtest = await (await fetch('/state/backtest-etf.json', { cache: 'no-cache' })).json(); } catch { /* reports show it as unavailable */ }
+}
+
 async function connect() {
   sync.status.mode = 'checking';
   render();
@@ -306,6 +339,8 @@ async function connect() {
   schedule();
 }
 
+await loadMarket();
+state = load();
 D.openDay(state);
 save(true);
 render();

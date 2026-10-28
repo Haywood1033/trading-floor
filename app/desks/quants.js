@@ -4,6 +4,8 @@ import * as D from '../desk.js';
 import { reviewPortfolio } from '../../src/quants/portfolioReviewer.js';
 import { runMomentum, DEFAULT_UNIVERSE } from '../../src/quants/momentum.js';
 import { esc, cls, p1, panel, seg, tierChip } from '../ui.js';
+import { metaFor } from '../../src/data/universe.js';
+const metaName = sym => metaFor(sym)?.name || '';
 
 const RULES = {
   rev: [
@@ -19,6 +21,17 @@ const RULES = {
     'Backtest note: on today\'s large caps (2017–2026) its buys beat SPY 60% of the time, about 1.9 points per 3 months better than buying all 19. Survivorship bias flatters this.'
   ]
 };
+const REPLAY_RULES = bt => {
+  const full = bt?.periods?.full?.strategies || [];
+  const m = full.find(x => x.id === 'mom3'), spy = full.find(x => x.id === 'spy');
+  const pct = v => (v * 100).toFixed(1) + '%';
+  return [
+    'Ranks the 20 ETFs (US sectors, small caps, international, emerging, bonds, gold, real estate, commodities) on 12-month return skipping the latest month.',
+    'Every 21 trading days: holds the top 3 that are above their 200-day average with a positive score, about 31% of the fund each; sells any fund that drops out. Empty slots stay in cash.',
+    'This is exactly the strategy in the fair backtest on the Reports desk.',
+    m && spy ? `Backtest ${bt.start.slice(0, 4)}–now, after costs: ${pct(m.cagr)} a year vs SPY ${pct(spy.cagr)}; worst drop ${pct(m.maxDrawdown)} vs SPY ${pct(spy.maxDrawdown)}. It has not beaten SPY on return; its case is smaller crashes.` : 'Backtest results load from state/backtest-etf.json.'
+  ];
+};
 const PLANNED = [
   ['Earnings drift', 'Trades the drift after big earnings surprises. Needs an earnings data source (Phase 2).'],
   ['Mean reversion', 'Buys quality names after sharp short-term drops.'],
@@ -28,6 +41,17 @@ const PLANNED = [
 
 function todayView(s, q) {
   const snap = D.snapshot(s);
+  if (q.id === 'mom' && D.isReplay(s)) {
+    const ranked = D.rotationView(s);
+    const picks = ranked.slice(0, 3).filter(r => r.ok).map(r => r.symbol);
+    const held = Object.entries(s.account.positions).filter(([, p]) => p.openedBy === 'mom').map(([x]) => x);
+    const due = D.daysToRebalance(s);
+    return `<div class="pad muted" style="font-size:13px">${due ? `Next rebalance in ${due} trading day${due === 1 ? '' : 's'}.` : 'Rebalances at the next open.'} Picks if it rebalanced now: <b>${picks.join(', ') || 'none (all cash)'}</b>.</div>
+      <div class="tablewrap"><table><thead><tr><th>#</th><th>Fund</th><th class="r">12-1 return</th><th>Above 200-day</th><th>Status</th></tr></thead><tbody>
+      ${ranked.map((r, i) => `<tr><td class="num">${r.score == null ? '-' : i + 1}</td><td><span class="sym">${r.symbol}</span>${held.includes(r.symbol) ? ' <span class="chip crypto">held</span>' : ''}<div class="qdesc">${esc(metaName(r.symbol))}</div></td>
+        <td class="r num ${cls(r.score ?? 0)}">${r.score == null ? '-' : D.pct(r.score, 0)}</td><td>${r.above200 == null ? '-' : r.above200 ? 'Yes' : 'No'}</td>
+        <td class="${picks.includes(r.symbol) ? 'up' : 'muted'}">${picks.includes(r.symbol) ? 'pick' : esc(r.why)}</td></tr>`).join('')}</tbody></table></div>`;
+  }
   if (q.id === 'mom') {
     const { ranked } = runMomentum(snap, s.sim.history, { universe: DEFAULT_UNIVERSE });
     return `<div class="tablewrap"><table><thead><tr><th>#</th><th>Name</th><th class="r">12-1 return</th><th>Above 200-day</th><th>Status</th></tr></thead><tbody>
@@ -64,7 +88,7 @@ export function renderQuants(s, ui) {
           <input id="${id}" data-draft inputmode="decimal" placeholder="no cap" value="${esc(ui.drafts[id] ?? (cap == null ? '' : String(+(cap * 100).toFixed(1))))}">
           <button class="btn" data-act="saveAlloc" data-q="${q.id}">Save</button>
           <span class="hint">Using ${D.usd(used)} (${p1(used / eq)} of NAV). Buys that would take it over the cap are blocked.</span></div>`;
-    return `${panel(q.name, '', `<div class="pad" style="display:grid;gap:12px">
+    return `${panel(q.id === 'mom' && D.isReplay(s) ? 'Momentum rotation' : q.name, '', `<div class="pad" style="display:grid;gap:12px">
         <div class="tiles">
           <div class="tile"><span class="label">Tier</span><span>${tierChip(q.tier)}</span><span class="sub">20 graded calls needed to rate</span></div>
           <div class="tile"><span class="label">Graded</span><span class="value">${q.graded}</span><span class="sub">${q.open} open</span></div>
@@ -75,9 +99,9 @@ export function renderQuants(s, ui) {
           <span class="muted" style="font-size:12px">Live: proposals go to your queue. Paper: calls are recorded and graded but never queued. Off: not run.</span></div>
         ${capField}
       </div>
-      <ul class="rules">${RULES[q.id].map(r => `<li>${esc(r)}</li>`).join('')}</ul>`)}
+      <ul class="rules">${(q.id === 'mom' && D.isReplay(s) ? REPLAY_RULES(ui.backtest) : RULES[q.id]).map(r => `<li>${esc(r)}</li>`).join('')}</ul>`)}
       <div class="cols-2">
-        ${panel(q.id === 'mom' ? "Today's ranking" : "Today's review", 'from the latest closes', todayView(s, q))}
+        ${panel(q.id === 'mom' ? (D.isReplay(s) ? 'Rotation ranking' : "Today's ranking") : "Today's review", 'from the latest closes', todayView(s, q))}
         ${panel('Call history', 'graded 63 trading days after each call', history(s, q))}
       </div>`;
   }).join('');

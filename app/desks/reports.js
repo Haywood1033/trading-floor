@@ -1,7 +1,39 @@
 // Reports: daily brief, performance by quant, monthly summary.
 
 import * as D from '../desk.js';
-import { esc, cls, p1, panel, lineChart, tierChip } from '../ui.js';
+import { esc, cls, p1, panel, lineChart, tierChip, seg } from '../ui.js';
+
+const pc = v => (v * 100).toFixed(1) + '%';
+// The fair backtest from state/backtest-etf.json, with a plain-language reading of it.
+function backtestPanel(bt, ui) {
+  if (!bt?.periods) return panel('Fair backtest', '', '<div class="empty">Backtest results did not load.</div>');
+  const pid = ui.btPeriod || 'full';
+  const per = bt.periods[pid];
+  const by = id => per.strategies.find(x => x.id === id);
+  const spy = by('spy'), m = by('mom3');
+  const rows = per.strategies.map(x => `<tr class="${x.id === 'mom3' ? 'hl' : ''}"><td><b>${esc(x.name)}</b><div class="qdesc">${esc(x.note)}</div></td>
+    <td class="r num ${cls(x.cagr - spy.cagr)}">${pc(x.cagr)}</td><td class="r num">${pc(x.vol)}</td><td class="r num">${x.sharpe.toFixed(2)}</td>
+    <td class="r num down">${pc(x.maxDrawdown)}<div class="qdesc">${x.drawdownFrom?.slice(0, 7)} to ${x.drawdownTo?.slice(0, 7)}</div></td>
+    <td class="r num">${x.worstYear?.year} <span class="${cls(x.worstYear?.ret)}">${pc(x.worstYear?.ret ?? 0)}</span></td>
+    <td class="r num">$${Math.round(x.growthOf10k).toLocaleString('en-US')}</td><td class="r num">${x.turnoverPerYear.toFixed(1)}×</td></tr>`).join('');
+  const verdict = m.cagr > spy.cagr
+    ? `Over this period the rotation returned more than SPY (${pc(m.cagr)} vs ${pc(spy.cagr)} a year) with a ${pc(m.maxDrawdown)} worst drop against SPY's ${pc(spy.maxDrawdown)}.`
+    : `Over this period the rotation returned less than simply holding SPY (${pc(m.cagr)} vs ${pc(spy.cagr)} a year). What it offered instead was a smaller worst drop: ${pc(m.maxDrawdown)} against SPY's ${pc(spy.maxDrawdown)}.`;
+  const full = bt.periods.full.strategies;
+  const curve = id => full.find(x => x.id === id)?.curve || [];
+  const c = curve('spy');
+  const chart = lineChart([
+    { name: 'SPY', color: 'var(--muted)', dash: true, values: c.map(p => p[1] / 1000) },
+    { name: 'Rotation top 3', color: 'var(--accent)', values: curve('mom3').map(p => p[1] / 1000) },
+    { name: '60/40', color: 'var(--up)', values: curve('6040').map(p => p[1] / 1000) }
+  ], [c[0]?.[0], c.at(-1)?.[0]], { fmtY: v => '$' + v.toFixed(0) + 'k' });
+  return panel('Fair backtest', `ETFs, ${bt.start} to ${bt.dataThrough}, ${bt.costBps} bps per trade, next-day execution`, `
+    <div class="search">${seg('btPeriod', pid, Object.entries(bt.periods).map(([k, v]) => [k, v.label]))}</div>
+    <div class="brief"><p>${verdict}</p>
+      <p class="muted">Growth of $10,000, full period. Every fund here traded the whole time, so the list isn't picked with hindsight. Past results are not a forecast.</p></div>
+    ${pid === 'full' ? chart : ''}
+    <div class="tablewrap"><table><thead><tr><th>Strategy</th><th class="r">Per year</th><th class="r">Volatility</th><th class="r">Sharpe</th><th class="r">Worst drop</th><th class="r">Worst year</th><th class="r">$10k became</th><th class="r">Turnover</th></tr></thead><tbody>${rows}</tbody></table></div>`);
+}
 
 function brief(s, day) {
   const entries = s.log.filter(e => e.at.startsWith(day)).reverse();
@@ -71,7 +103,8 @@ export function renderReports(s, ui) {
     { name: 'SPY', color: 'var(--muted)', dash: true, values: [s.fund.spyStart, ...s.curve.daily.map(d => d.spy ?? null)].map(v => (v == null ? null : v / s.fund.spyStart * 100)) }
   ], [s.fund.inception, s.curve.daily.at(-1)?.date || ''], { fmtY: v => v.toFixed(1) });
 
-  return `<div class="desk-head"><h1>Reports</h1><p>What the desk did, how each source of trades is performing, and the fund month by month.</p></div>
+  return `<div class="desk-head"><h1>Reports</h1><p>The evidence behind the strategy, what the desk did, and how the fund is doing.</p></div>
+    ${backtestPanel(ui.backtest, ui)}
     ${panel('Daily brief', closed.length ? `${closed.length} closed day${closed.length === 1 ? '' : 's'}` : '', dailyBrief)}
     ${panel('Fund vs SPY', 'indexed to 100 at inception', chart)}
     ${panel('Performance by source', '', perf)}

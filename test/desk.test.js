@@ -202,3 +202,54 @@ test('a $1,000 fund trades fractional shares with limits scaled to its size', ()
   D.resetLimits(s);
   assert.equal(s.settings.limits.maxOrderValue, 200);
 });
+
+// ---- replay funds on real-shaped history
+import { synthHist } from './helpers.js';
+function replayFund() {
+  const syms = { SPY: 0.0004, QQQ: 0.0009, XLK: 0.0011, XLE: -0.0004, TLT: 0.0001, GLD: 0.0006, SHY: 0.00005, BTC: 0.002 };
+  const h = synthHist(600, syms);
+  D.setMarket(h);
+  return { h, s: D.freshReplayState({ startDate: h.dates[300], capital: 1000 }) };
+}
+
+test('a replay fund starts on the chosen real date with rotation buys of about a third each', () => {
+  const { h, s } = replayFund();
+  assert.equal(s.sim.day, h.dates[300]);
+  D.openDay(s);
+  const p = D.pending(s);
+  assert.ok(p.length >= 2 && p.length <= 3);
+  assert.ok(p.every(o => o.quantId === 'mom' && o.side === 'buy' && o.assetClass === 'etf'));
+  for (const o of p) assert.equal(D.approve(s, o.id).ok, true, `${o.symbol}: ${JSON.stringify(D.riskFor(s, o).checks.filter(c => !c.ok))}`);
+  assert.ok(D.totals(s).cash / D.totals(s).equity > 0.05);
+});
+
+test('the rotation only rebalances every 21 trading days', () => {
+  const { s } = replayFund();
+  D.openDay(s);
+  for (const o of D.pending(s)) D.approve(s, o.id);
+  D.skipToClose(s);                                        // day 2
+  assert.equal(D.pending(s).filter(o => o.quantId === 'mom').length, 0);
+  assert.equal(D.daysToRebalance(s), 20);
+  D.skipDays(s, 20);
+  assert.ok(s.log.some(e => /Momentum/.test(e.text) && e.at.startsWith(s.sim.day)));
+});
+
+test('a replay fund saves small, reloads, and replays the same market', () => {
+  const { s } = replayFund();
+  D.openDay(s);
+  for (let i = 0; i < 10; i++) D.tick(s);
+  const json = JSON.stringify(s);
+  assert.ok(json.length < 60000, `saved size ${json.length}`);
+  const t = D.migrate(JSON.parse(json));
+  D.tick(s); D.tick(t);
+  assert.deepEqual(t.sim.prices, s.sim.prices);
+});
+
+test('a replay fund ends cleanly when the history runs out', () => {
+  const { h } = replayFund();
+  const s = D.freshReplayState({ startDate: h.dates[595], capital: 1000 });
+  D.skipDays(s, 10);
+  assert.equal(s.sim.ended, true);
+  assert.equal(D.marketOpen(s), false);
+  assert.ok(s.log.some(e => /latest data/.test(e.text)));
+});
