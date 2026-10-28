@@ -9,7 +9,7 @@ export const STATUSES = ['all', 'pending', 'filled', 'rejected', 'expired', 'can
 function ticket(s, ui) {
   const d = ui.drafts;
   const held = Object.keys(s.account.positions);
-  const symbols = [...new Set([...held, ...DEFAULT_UNIVERSE, ...D.CRYPTO, 'SPY'])].sort();
+  const symbols = (D.isReplay(s) ? [...new Set([...held, ...Object.keys(s.sim.prices)])] : [...new Set([...held, ...DEFAULT_UNIVERSE, ...D.CRYPTO, 'SPY'])]).sort();
   const sym = d['t-sym'] || symbols[0], side = d['t-side'] || 'buy', qty = d['t-qty'] ?? '';
   const pv = D.previewManual(s, { symbol: sym, side, qty });
   const checks = pv ? `<div class="checks">${pv.checks.filter(c => !c.ok || !['halted', 'valid'].includes(c.id)).map(c => `<span class="${c.ok ? 'ok' : 'bad'}">${c.ok ? '✓' : '✕'} ${esc(c.message)}</span>`).join('')}</div>` : '';

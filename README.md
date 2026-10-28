@@ -5,8 +5,9 @@ a risk manager enforces hard limits, and I approve each trade (later: auto-execu
 within limits). This is not a brokerage and never handles anyone else's money.
 
 **The app** (`app/`, served at the site root on Vercel) is being built in three phases:
-1. **Phase 1 (now): the full app on a simulated market.** Every desk and manager control working
-   end to end with a simulated $1,000 fund (fractional shares), synced across devices.
+1. **Phase 1 (now): the full app on real market history.** A simulated $1,000 fund (fractional
+   shares) on a replay of real daily closes from a start date you pick; every desk and control
+   works end to end, synced across devices.
 2. **Phase 2: paper validation** with real market data.
 3. **Phase 3: live execution** through a broker API, within the manager's limits.
 
@@ -79,7 +80,12 @@ alone does not fit a live trading loop.
 ## Code layout
 
 - `app/index.html`, `app/styles.css`, `app/main.js`: app shell, navigation, simulated clock, saving
-- `app/sim.js`: seeded market simulator (78 five-minute steps per trading day)
+- `app/replay.js`: real-history replay: plays `state/history` forward from the fund's start date;
+  each day moves from yesterday's real close to today's along a seeded path and ends exactly on
+  the real close; quants only see completed days
+- `app/sim.js`: synthetic market (fallback if history can't load, and tests)
+- `src/quants/rotation.js`: the momentum rotation the backtest measures (top 3 ETFs, rebalanced
+  every 21 trading days), used as the Momentum quant in replay funds
 - `app/desk.js`: the fund and every manager/desk action; all fills go through the risk manager
 - `app/floor.js`: Floor desk; `app/desks/*.js`: the other six desks; `app/ui.js`: shared charts, gauges, bars
 - `src/node/fileStores.js`: file-backed stores for Node scripts (kept out of the browser engine)

@@ -4,7 +4,11 @@
 // Every fill goes through fill(), which always runs the risk manager first (kill switch
 // included). There is no other path that changes positions or cash.
 
-import { createSim, step, openNextDay, closesAfter, TICKS_PER_DAY } from './sim.js';
+import * as synthetic from './sim.js';
+import * as replay from './replay.js';
+import { TICKS_PER_DAY } from './sim.js';
+import { runRotation, rankUniverse } from '../src/quants/rotation.js';
+import { ROTATION_UNIVERSE, metaFor } from '../src/data/universe.js';
 import { sampleBars } from '../src/data/sample.js';
 import { reviewPortfolio } from '../src/quants/portfolioReviewer.js';
 import { runMomentum, DEFAULT_UNIVERSE } from '../src/quants/momentum.js';
@@ -14,7 +18,21 @@ import { summarize } from '../src/core/portfolio.js';
 import { DEFAULT_LIMITS } from '../src/risk/limits.js';
 import { sectorOf } from '../src/core/sectors.js';
 
-export const STATE_VERSION = 2; // 2: $1,000 fund, fractional shares
+export const STATE_VERSION = 3; // 3: real-history replay
+const { createSim } = synthetic;
+
+// The market behind a fund: real-history replay, or the synthetic simulator (fallback/tests).
+const M = sim => (sim.mode === 'replay' ? replay : synthetic);
+const step = sim => M(sim).step(sim);
+const openNextDay = sim => M(sim).openNextDay(sim);
+const closesAfter = (sim, sym, date) => M(sim).closesAfter(sim, sym, date);
+
+// Real price history, loaded once by the app (state/history) and shared by every fund.
+let MARKET = null;
+export const setMarket = hist => { MARKET = hist; };
+export const market = () => MARKET;
+export const isReplay = state => state.sim.mode === 'replay';
+export const REBALANCE_DAYS = 21;
 export const CRYPTO = ['BTC', 'ETH', 'SOL'];
 export const QUANTS = [
   { id: 'rev', name: 'Portfolio reviewer', desc: 'Flags stale holdings and oversized positions; proposes sells and trims.' },
@@ -26,10 +44,16 @@ export const DEFAULT_ALLOC = { rev: null, mom: 0.6 };
 
 // Fills in fields added after a fund was first saved, so older saved funds keep working.
 export function migrate(state) {
+  if (state.sim.mode === 'replay' && !state.sim.hist) {
+    if (!MARKET) throw new Error('Price history is not loaded');
+    replay.attach(state.sim, MARKET);
+  }
+  state.daysRun ??= state.curve.daily.length;
+  state.nextRebalance ??= 0;
   state.peakEquity ??= Math.max(state.fund.capital, ...state.curve.daily.map(d => d.equity));
   state.fund.spyStart ??= state.sim.prices.SPY;
   state.settings.quantAlloc ??= { ...DEFAULT_ALLOC };
-  state.settings.limits = { ...defaultLimitsFor(state.fund.capital), ...state.settings.limits };
+  state.settings.limits = { ...defaultLimitsFor(state.fund.capital, { replay: isReplay(state) }), ...state.settings.limits };
   return state;
 }
 
@@ -37,12 +61,32 @@ export const DEFAULT_CAPITAL = 1000;
 
 // Default limits scaled to the fund: percentages as in DEFAULT_LIMITS, dollar limits as a
 // share of starting capital, and a minimum trade so tiny orders aren't proposed.
-export function defaultLimitsFor(capital) {
+export function defaultLimitsFor(capital, { replay = false } = {}) {
   return {
     ...structuredClone(DEFAULT_LIMITS),
-    maxOrderValue: Math.round(capital * 0.20),
+    // The rotation buys about a third of the fund per fund held; the order cap leaves room for that.
+    maxOrderValue: Math.round(capital * (replay ? 0.40 : 0.20)),
     autoMaxOrderValue: Math.round(capital * 0.10),
-    minOrderValue: Math.max(1, Math.round(capital * 0.005))
+    minOrderValue: Math.max(1, Math.round(capital * 0.005)),
+    // The backtest has no sector caps; the replay starts without them so it trades the same strategy.
+    ...(replay ? { sectorLimits: {} } : {})
+  };
+}
+
+// A fund on real history, starting on startDate.
+export function freshReplayState({ hist = MARKET, startDate, capital = DEFAULT_CAPITAL, seed = 7 } = {}) {
+  if (!hist) throw new Error('Price history is not loaded');
+  const sim = replay.createReplay(hist, { startDate, seed });
+  return {
+    version: STATE_VERSION,
+    fund: { name: 'Trading Floor', capital, inception: sim.day, spyStart: sim.prices.SPY, replay: true },
+    sim,
+    account: { cash: capital, positions: {}, realized: 0 },
+    startOfDayEquity: capital, peakEquity: capital, openedDay: null, daysRun: 0, nextRebalance: 0,
+    orders: [], signals: [], log: [], kill: { halted: false },
+    settings: { mode: 'approval', speed: 1, limits: defaultLimitsFor(capital, { replay: true }), quantModes: { rev: 'live', mom: 'live' }, quantAlloc: { rev: null, mom: null } },
+    curve: { intraday: [capital], daily: [] },
+    seq: 1
   };
 }
 
@@ -74,7 +118,14 @@ export function snapshot(state) {
   return { cash: state.account.cash, positions, startOfDayEquity: state.startOfDayEquity };
 }
 export const totals = state => summarize(snapshot(state));
-export const marketOpen = state => state.sim.tick < TICKS_PER_DAY;
+export const marketOpen = state => !state.sim.ended && state.sim.tick < TICKS_PER_DAY;
+export const assetClassOf = sym => (CRYPTO.includes(sym) ? 'crypto' : metaFor(sym) ? 'etf' : 'stock');
+export const sectorFor = sym => metaFor(sym)?.sector || sectorOf(sym, assetClassOf(sym));
+export const universe = state => (isReplay(state) ? ROTATION_UNIVERSE.filter(s => state.sim.history[s]) : DEFAULT_UNIVERSE);
+export const daysToRebalance = state => Math.max(0, (state.nextRebalance ?? 0) - (state.daysRun ?? 0));
+export function rotationView(state) {
+  return rankUniverse(state.sim.history, universe(state));
+}
 export const pending = state => state.orders.filter(o => o.status === 'pending');
 const ctx = (state, order) => ({
   limits: state.settings.limits, halted: state.kill.halted, peakEquity: state.peakEquity,
@@ -195,15 +246,25 @@ export function openDay(state) {
 
   const bars = state.sim.history;
   const snap = snapshot(state);
+  const replayFund = isReplay(state);
+  const owned = id => Object.fromEntries(Object.entries(state.account.positions).filter(([, p]) => p.openedBy === id).map(([sym, p]) => [sym, p.qty]));
+  const notRotation = { ...snap, positions: Object.fromEntries(Object.entries(snap.positions).filter(([, p]) => p.openedBy !== 'mom')) };
   const runs = {
-    rev: () => reviewPortfolio(snap, bars, { limits: state.settings.limits, fractional: true }).proposals,
-    mom: () => runMomentum(snap, bars, { universe: DEFAULT_UNIVERSE, fractional: true, minOrderValue: state.settings.limits.minOrderValue || 0 }).proposals
+    // The reviewer watches everything the rotation doesn't own (your own trades, crypto).
+    rev: () => reviewPortfolio(replayFund ? notRotation : snap, bars, { limits: state.settings.limits, fractional: true }).proposals,
+    mom: () => {
+      if (!replayFund) return runMomentum(snap, bars, { universe: DEFAULT_UNIVERSE, fractional: true, minOrderValue: state.settings.limits.minOrderValue || 0 }).proposals;
+      if (state.daysRun < state.nextRebalance) return null;                     // not a rebalance day
+      state.nextRebalance = state.daysRun + REBALANCE_DAYS;
+      return runRotation(snap, bars, { universe: universe(state), held: owned('mom'), cashBuffer: 0.06, minOrderValue: state.settings.limits.minOrderValue || 0, metaFor }).proposals;
+    }
   };
   const t = tracker(state);
   for (const q of QUANTS) {
     const mode = state.settings.quantModes[q.id];
     if (mode === 'off') continue;
     const proposals = runs[q.id]();
+    if (proposals === null) continue;
     if (!proposals.length) { log(state, 'signal', `${q.name}: nothing to propose.`); continue; }
     let queued = 0;
     for (const p of proposals) {
@@ -212,10 +273,10 @@ export function openDay(state) {
       t.record(p, { benchmark, benchEntry: state.sim.prices[benchmark], issuedOn: state.sim.day });
       if (mode === 'paper') continue;
       if (pending(state).some(o => o.symbol === p.symbol && o.side === p.side)) continue;
-      state.orders.unshift({
+      state.orders.push({
         id: state.seq++, status: 'pending', created: state.sim.day, quantId: q.id,
-        symbol: p.symbol, side: p.side, qty: p.qty, proposedQty: p.qty, sector: p.sector || sectorOf(p.symbol, p.assetClass),
-        assetClass: p.assetClass, confidence: p.confidence, thesis: p.thesis
+        symbol: p.symbol, side: p.side, qty: p.qty, proposedQty: p.qty, sector: p.sector || sectorFor(p.symbol),
+        assetClass: p.assetClass || assetClassOf(p.symbol), confidence: p.confidence, thesis: p.thesis
       });
       queued++;
     }
@@ -293,10 +354,10 @@ export function placeManual(state, { symbol, side, qty }) {
   qty = +qty;
   if (!state.sim.prices[symbol]) return { ok: false, reason: `Unknown symbol ${symbol}` };
   if (!(qty > 0)) return { ok: false, reason: 'Enter a quantity above zero' };
-  const assetClass = CRYPTO.includes(symbol) ? 'crypto' : 'stock';
+  const assetClass = assetClassOf(symbol);
   const o = {
     id: state.seq++, status: 'pending', created: state.sim.day, quantId: 'manager', symbol, side, qty: +qty.toFixed(6), proposedQty: qty,
-    sector: state.account.positions[symbol]?.sector || sectorOf(symbol, assetClass), assetClass, confidence: null, thesis: 'Manager ticket.'
+    sector: state.account.positions[symbol]?.sector || sectorFor(symbol), assetClass, confidence: null, thesis: 'Manager ticket.'
   };
   const pre = evaluate(state, { ...o, price: state.sim.prices[symbol] });
   if (!pre.approved || !marketOpen(state)) {
@@ -310,8 +371,8 @@ export function placeManual(state, { symbol, side, qty }) {
 }
 export function previewManual(state, { symbol, side, qty }) {
   if (!state.sim.prices[symbol] || !(+qty > 0)) return null;
-  const assetClass = CRYPTO.includes(symbol) ? 'crypto' : 'stock';
-  const o = { quantId: 'manager', symbol, side, qty: +qty, price: state.sim.prices[symbol], sector: state.account.positions[symbol]?.sector || sectorOf(symbol, assetClass), assetClass };
+  const assetClass = assetClassOf(symbol);
+  const o = { quantId: 'manager', symbol, side, qty: +qty, price: state.sim.prices[symbol], sector: state.account.positions[symbol]?.sector || sectorFor(symbol), assetClass };
   return { ...evaluate(state, o), price: o.price, value: o.qty * o.price };
 }
 export const closePosition = (state, symbol) => placeManual(state, { symbol, side: 'sell', qty: state.account.positions[symbol]?.qty });
@@ -330,7 +391,7 @@ export function updateLimits(state, changes) {
   return notes.length;
 }
 export function resetLimits(state) {
-  state.settings.limits = defaultLimitsFor(state.fund.capital);
+  state.settings.limits = defaultLimitsFor(state.fund.capital, { replay: isReplay(state) });
   log(state, 'system', 'Risk limits reset to defaults.');
 }
 export function setQuantAlloc(state, id, value) {
@@ -390,9 +451,16 @@ export function closeDay(state) {
   if (state.curve.daily.length > 400) state.curve.daily.shift();
   log(state, 'system', `Market close. NAV ${usd(eq)} (${pct(eq / state.startOfDayEquity - 1)} today).` +
     (expired.length ? ` ${expired.length} unapproved order${expired.length > 1 ? 's' : ''} expired.` : ''));
+  state.daysRun = (state.daysRun || 0) + 1;
   openNextDay(state.sim);
   gradeDue(state);
+  if (state.sim.ended) { log(state, 'system', `Replay reached the latest data (${state.sim.day}). The market stays closed until the history updates.`); return; }
   openDay(state);
+}
+
+// Runs whole trading days (to the close of the n-th day).
+export function skipDays(state, n) {
+  for (let i = 0; i < n && !state.sim.ended; i++) skipToClose(state);
 }
 
 // Grades open calls whose horizon has passed, using simulated closes.
