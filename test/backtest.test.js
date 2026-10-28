@@ -50,3 +50,12 @@ test('no look-ahead: a stock that only rallies after a call date is not picked b
   const early = r.recentCalls.momentum.concat([]).filter(c => c.symbol === 'LATE' && c.date < late[500].date);
   assert.equal(early.length, 0);
 });
+
+test('long histories request an explicit date span, not range=max', async () => {
+  const { fetchDaily } = await import('../src/data/yahoo.js');
+  let url;
+  const fetchImpl = async u => { url = u; return { ok: true, json: async () => ({ chart: { result: [{ timestamp: [1704153600], indicators: { adjclose: [{ adjclose: [1] }] } }] } }) }; };
+  await fetchDaily('SPY', { from: '2004-01-01', fetchImpl });
+  assert.match(url, /period1=1072915200&period2=\d+&interval=1d/);
+  assert.doesNotMatch(url, /range=/);
+});
