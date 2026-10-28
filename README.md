@@ -130,19 +130,18 @@ Alpaca paper keys, never in the repo. Either:
 
 Then `npm run sync`.
 
-## Daily run and backtest (GitHub Actions, no accounts or keys)
+## Price history and the fair backtest (GitHub Actions, no accounts or keys)
 
-Prices come from Yahoo Finance's free public chart endpoint (`src/data/yahoo.js`), fetched on
-GitHub Actions because the Claude cloud session can't reach any price source.
+`.github/workflows/history.yml` runs each weekday after the close and on demand:
+- `scripts/fetch-history.js` pulls daily adjusted closes from Yahoo for the 21-fund ETF universe
+  (`src/data/universe.js`) plus BTC and ETH, into `state/history/` (one file per year).
+- `scripts/backtest-etf.js` runs `src/portfolioBacktest.js` on that history and writes
+  `state/backtest-etf.json`.
 
-- `.github/workflows/backtest.yml` (run by hand): replays momentum and the portfolio reviewer
-  over ~10 years and grades every call the same way live calls are graded. Results in
-  `state/backtest.json`. Caveats (survivorship bias, no costs) are written into the file.
-- `.github/workflows/daily.yml` (weekdays after the close): runs the desk on a simulated paper
-  account (`state/account.json`, starts at $100k cash), records and grades calls in
-  `state/signals.json`, writes `state/feed.json` for the UI. Never places orders.
-
-The Alpaca adapter stays in `src/brokers/` for later, if real order placement is wanted.
+The backtest uses ETFs that all existed from 2006, so the list isn't survivorship-biased. It
+simulates real holdings with monthly rebalancing, 10 bps cost per dollar traded, and next-day
+execution, and compares momentum rotation against SPY, 60/40 and equal weight, over the full
+period and two halves (to 2016, and 2017 on).
 
 ## Server sync and login (Vercel)
 
