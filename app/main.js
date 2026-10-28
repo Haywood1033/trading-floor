@@ -197,7 +197,11 @@ function act(el) {
     case 'logout': sync.logout().then(() => showLogin()); return;
     case 'useLocal': $('login').hidden = true; sync.status.mode = 'local'; schedule(); render(); return;
     case 'skip': D.skipToClose(state); break;
-    case 'skipDays': D.skipDays(state, +v); break;
+    case 'skipDays': {
+      const ran = D.skipDays(state, +v);
+      if (ran < +v && D.pending(state).length) toast(`Stopped after ${ran} trading day${ran === 1 ? '' : 's'}: new proposals are waiting for you.`, true);
+      break;
+    }
     case 'preset': ui.drafts['nf-date'] = v; break;
     case 'btPeriod': ui.btPeriod = v; break;
     case 'newFund': {
