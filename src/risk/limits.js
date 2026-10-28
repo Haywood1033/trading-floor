@@ -1,6 +1,7 @@
 // Starting hard limits. Fractions are of total account equity.
 export const DEFAULT_LIMITS = Object.freeze({
   maxPositionPct: 0.10,          // any single stock, after the order fills
+  maxEtfPct: 0.35,               // any single ETF (a diversified fund), after the order fills
   maxCryptoPct: 0.20,            // all crypto combined
   sectorLimits: { Tech: 0.40 },  // per-sector caps; sectors not listed are uncapped
   minCashPct: 0.05,              // cash floor after a buy

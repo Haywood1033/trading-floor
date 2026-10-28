@@ -20,8 +20,13 @@ export function parseChart(json) {
   return out;
 }
 
-export async function fetchDaily(symbol, { range = '10y', fetchImpl = globalThis.fetch, retries = 2 } = {}) {
-  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(yahooSymbol(symbol))}?range=${range}&interval=1d&events=div%2Csplit`;
+// Pass `from` (YYYY-MM-DD) for long histories: with range=max Yahoo silently returns monthly
+// bars instead of daily ones.
+export async function fetchDaily(symbol, { range = '10y', from = null, fetchImpl = globalThis.fetch, retries = 2 } = {}) {
+  const span = from
+    ? `period1=${Math.floor(Date.parse(from + 'T00:00:00Z') / 1000)}&period2=${Math.floor(Date.now() / 1000)}`
+    : `range=${range}`;
+  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(yahooSymbol(symbol))}?${span}&interval=1d&events=div%2Csplit`;
   let lastErr;
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {

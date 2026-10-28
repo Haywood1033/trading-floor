@@ -118,3 +118,11 @@ test('max drawdown from peak blocks buys but not sells', () => {
   assert.equal(evaluateOrder(sell('INTC', 10, 22.10), snap, { peakEquity: peak }).approved, true);
   assert.equal(evaluateOrder(buy('NVDA', 1, 138.40), snap, { peakEquity: eq * 1.05 }).approved, true);
 });
+
+test('ETFs use their own position cap', () => {
+  const snap = { cash: 10000, positions: {}, startOfDayEquity: 10000 };
+  const etf = { symbol: 'XLK', side: 'buy', qty: 10, price: 300, sector: 'Tech', assetClass: 'etf' };       // 30%
+  assert.equal(evaluateOrder(etf, snap, { limits: { minCashPct: 0, maxOrderValue: 1e9 } }).approved, true);
+  assert.equal(evaluateOrder({ ...etf, assetClass: 'stock' }, snap, { limits: { minCashPct: 0, maxOrderValue: 1e9 } }).approved, false);
+  assert.equal(evaluateOrder({ ...etf, qty: 12 }, snap, { limits: { minCashPct: 0, maxOrderValue: 1e9 } }).approved, false); // 36%
+});

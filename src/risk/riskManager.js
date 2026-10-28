@@ -59,7 +59,8 @@ export function evaluateOrder(order, snapshot, ctx = {}) {
       add('cryptoExposure', c <= limits.maxCryptoPct, `Crypto ${pct(c)} / ${pct(limits.maxCryptoPct)}`);
     } else {
       const p = after.bySymbol[order.symbol] / after.equity;
-      add('positionSize', p <= limits.maxPositionPct, `${order.symbol} ${pct(p)} / ${pct(limits.maxPositionPct)}`);
+      const cap = assetClass === 'etf' ? (limits.maxEtfPct ?? limits.maxPositionPct) : limits.maxPositionPct;
+      add('positionSize', p <= cap, `${order.symbol} ${pct(p)} / ${pct(cap)}`);
     }
 
     const sectorCap = limits.sectorLimits?.[sector];
