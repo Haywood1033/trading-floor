@@ -1,0 +1,193 @@
+{
+  "updated": "2026-10-28T02:18:34.542Z",
+  "first": "2004-01-02",
+  "last": "2026-10-27",
+  "years": [
+    2004,
+    2005,
+    2006,
+    2007,
+    2008,
+    2009,
+    2010,
+    2011,
+    2012,
+    2013,
+    2014,
+    2015,
+    2016,
+    2017,
+    2018,
+    2019,
+    2020,
+    2021,
+    2022,
+    2023,
+    2024,
+    2025,
+    2026
+  ],
+  "symbols": {
+    "SPY": {
+      "first": "2004-01-02",
+      "symbol": "SPY",
+      "name": "S&P 500",
+      "sector": "US equity",
+      "group": "equity"
+    },
+    "QQQ": {
+      "first": "2004-01-02",
+      "symbol": "QQQ",
+      "name": "Nasdaq 100",
+      "sector": "Tech",
+      "group": "equity"
+    },
+    "IWM": {
+      "first": "2004-01-02",
+      "symbol": "IWM",
+      "name": "US small caps",
+      "sector": "US equity",
+      "group": "equity"
+    },
+    "EFA": {
+      "first": "2004-01-02",
+      "symbol": "EFA",
+      "name": "Developed markets ex-US",
+      "sector": "International",
+      "group": "equity"
+    },
+    "EEM": {
+      "first": "2004-01-02",
+      "symbol": "EEM",
+      "name": "Emerging markets",
+      "sector": "International",
+      "group": "equity"
+    },
+    "XLK": {
+      "first": "2004-01-02",
+      "symbol": "XLK",
+      "name": "Technology",
+      "sector": "Tech",
+      "group": "equity"
+    },
+    "XLF": {
+      "first": "2004-01-02",
+      "symbol": "XLF",
+      "name": "Financials",
+      "sector": "Financials",
+      "group": "equity"
+    },
+    "XLE": {
+      "first": "2004-01-02",
+      "symbol": "XLE",
+      "name": "Energy",
+      "sector": "Energy",
+      "group": "equity"
+    },
+    "XLV": {
+      "first": "2004-01-02",
+      "symbol": "XLV",
+      "name": "Health care",
+      "sector": "Health",
+      "group": "equity"
+    },
+    "XLY": {
+      "first": "2004-01-02",
+      "symbol": "XLY",
+      "name": "Consumer discretionary",
+      "sector": "Retail",
+      "group": "equity"
+    },
+    "XLP": {
+      "first": "2004-01-02",
+      "symbol": "XLP",
+      "name": "Consumer staples",
+      "sector": "Staples",
+      "group": "equity"
+    },
+    "XLI": {
+      "first": "2004-01-02",
+      "symbol": "XLI",
+      "name": "Industrials",
+      "sector": "Industrials",
+      "group": "equity"
+    },
+    "XLU": {
+      "first": "2004-01-02",
+      "symbol": "XLU",
+      "name": "Utilities",
+      "sector": "Utilities",
+      "group": "equity"
+    },
+    "XLB": {
+      "first": "2004-01-02",
+      "symbol": "XLB",
+      "name": "Materials",
+      "sector": "Materials",
+      "group": "equity"
+    },
+    "VNQ": {
+      "first": "2004-09-29",
+      "symbol": "VNQ",
+      "name": "US real estate",
+      "sector": "Real estate",
+      "group": "real assets"
+    },
+    "GLD": {
+      "first": "2004-11-18",
+      "symbol": "GLD",
+      "name": "Gold",
+      "sector": "Commodities",
+      "group": "real assets"
+    },
+    "DBC": {
+      "first": "2006-02-06",
+      "symbol": "DBC",
+      "name": "Commodities basket",
+      "sector": "Commodities",
+      "group": "real assets"
+    },
+    "TLT": {
+      "first": "2004-01-02",
+      "symbol": "TLT",
+      "name": "Long Treasuries",
+      "sector": "Bonds",
+      "group": "bonds"
+    },
+    "IEF": {
+      "first": "2004-01-02",
+      "symbol": "IEF",
+      "name": "7-10y Treasuries",
+      "sector": "Bonds",
+      "group": "bonds"
+    },
+    "LQD": {
+      "first": "2004-01-02",
+      "symbol": "LQD",
+      "name": "Corporate bonds",
+      "sector": "Bonds",
+      "group": "bonds"
+    },
+    "SHY": {
+      "first": "2004-01-02",
+      "symbol": "SHY",
+      "name": "Short Treasuries (cash-like)",
+      "sector": "Cash",
+      "group": "cash"
+    },
+    "BTC": {
+      "first": "2014-09-17",
+      "symbol": "BTC",
+      "name": "Bitcoin",
+      "sector": "Crypto",
+      "group": "crypto"
+    },
+    "ETH": {
+      "first": "2017-11-09",
+      "symbol": "ETH",
+      "name": "Ethereum",
+      "sector": "Crypto",
+      "group": "crypto"
+    }
+  }
+}
