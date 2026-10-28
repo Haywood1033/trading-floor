@@ -1,17 +1,17 @@
-name: Daily desk run
+name: Price history and backtest
 
-# Weekdays after the US close (21:30 UTC is 5:30pm New York in summer, 4:30pm in winter).
-# Also runnable by hand from the Actions tab.
+# Weekdays after the US close, and on demand: refresh daily prices (Yahoo, no key) for the
+# ETF universe and BTC/ETH into state/history/, then rerun the fair backtest.
 on:
   schedule:
-    - cron: '30 21 * * 1-5'
+    - cron: '30 22 * * 1-5'
   workflow_dispatch:
 
 permissions:
   contents: write
 
 concurrency:
-  group: daily-desk
+  group: history
   cancel-in-progress: false
 
 jobs:
@@ -23,13 +23,13 @@ jobs:
         with:
           node-version: 22
       - run: npm test
-      - name: Run quants on the simulated paper account (Yahoo prices, no keys)
-        run: node scripts/daily.js
+      - run: node scripts/fetch-history.js
+      - run: node scripts/backtest-etf.js
       - name: Save results
         run: |
           git config user.name "trading-floor bot"
           git config user.email "actions@users.noreply.github.com"
-          git add state/
-          git diff --cached --quiet || git commit -m "Daily desk run $(date -u +%Y-%m-%d)"
+          git add state/history state/backtest-etf.json
+          git diff --cached --quiet || git commit -m "Price history and backtest $(date -u +%Y-%m-%d)"
           git pull --rebase origin main
           git push
