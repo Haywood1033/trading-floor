@@ -40,7 +40,7 @@ export function renderPortfolio(s) {
       <td class="r num">${D.fmtQty({ symbol: r.sym, qty: r.p.qty })}</td>
       <td class="r num">${D.usd(r.avg, 2)}</td><td class="r num">${D.usd(r.price, 2)}</td>
       <td class="r num">${D.usd(r.value)}</td>
-      <td class="r num ${r.p.assetClass !== 'crypto' && r.w > s.settings.limits.maxPositionPct ? 'down' : ''}">${p1(r.w)}</td>
+      <td class="r num ${D.positionCap(s, r.p) != null && r.w > D.positionCap(s, r.p) + 1e-9 ? 'down' : ''}">${p1(r.w)}</td>
       <td class="r num ${cls(r.price / r.prev - 1)}">${D.pct(r.price / r.prev - 1, 1)}</td>
       <td class="r num ${cls(r.u)}">${signed(r.u, v => D.usd(v))}<div class="qdesc">${D.pct(r.u / r.p.costBasis, 1)}</div></td>
       <td><span class="num">${r.p.opened}</span><div class="qdesc">${D.quantName(r.p.openedBy || 'manager')}</div></td>

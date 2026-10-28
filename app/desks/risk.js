@@ -8,6 +8,7 @@ const SECTORS = ['Tech', 'Health', 'Financials', 'Energy', 'Retail', 'Auto', 'Te
 // Percent fields are edited as whole percents; money fields as dollars.
 export const LIMIT_FIELDS = [
   { key: 'maxPositionPct', label: 'Max single stock position', unit: '%', hint: 'Largest share of NAV any one stock may reach after a buy.' },
+  { key: 'maxEtfPct', label: 'Max single ETF position', unit: '%', hint: 'Largest share of NAV any one fund (ETF) may reach after a buy. Funds are diversified, so this is higher than the stock cap.' },
   { key: 'maxCryptoPct', label: 'Max crypto, combined', unit: '%', hint: 'All coins together, as a share of NAV.' },
   { key: 'minCashPct', label: 'Cash floor', unit: '%', hint: 'Buys that would leave less cash than this are blocked.' },
   { key: 'dailyLossLimitPct', label: 'Daily loss limit', unit: '%', neg: true, hint: 'Once the day is down this much, new buys stop. Sells still allowed.' },
@@ -45,11 +46,9 @@ export function renderRisk(s, ui) {
 
   const snap = D.snapshot(s);
   const day = t.equity / s.startOfDayEquity - 1;
-  const stocks = Object.entries(snap.positions).filter(([, p]) => p.assetClass !== 'crypto');
-  const big = stocks.reduce((m, [sym, p]) => (p.qty * p.price > (m?.v || 0) ? { sym, v: p.qty * p.price } : m), null);
   const exposure = gauge('Daily loss', Math.max(0, -day), -L.dailyLossLimitPct, p1) +
     gauge('Drawdown from peak', Math.max(0, 1 - t.equity / s.peakEquity), L.maxDrawdownPct, p1, `Peak NAV ${D.usd(s.peakEquity)}`) +
-    gauge('Largest stock position', big ? big.v / t.equity : 0, L.maxPositionPct, p1, big ? big.sym : 'No stock positions') +
+    (lg => gauge('Largest position vs its cap', lg ? lg.weight : 0, lg ? lg.cap : L.maxPositionPct, p1, lg ? lg.sym : 'No positions'))(D.largestVsCap(s)) +
     gauge('Crypto', t.crypto / t.equity, L.maxCryptoPct, p1) +
     gauge('Day trades (5 days)', D.dayTradesUsed(s), L.dayTradeLimit ?? 0, v => String(v), t.equity >= L.dayTradeEquityThreshold ? `Cap does not apply above ${D.usd(L.dayTradeEquityThreshold)} NAV.` : '');
   const sectorBars = bars(Object.entries(t.bySector).map(([label, value]) => ({ label, value, cap: L.sectorLimits?.[label] })).sort((a, b) => b.value - a.value), t.equity, v => D.usd(v));

@@ -30,7 +30,7 @@ function portfolioPanel(s) {
     const value = p.qty * price, u = value - p.costBasis; unreal += u;
     const w = value / t.equity;
     const chips = (p.assetClass === 'crypto' ? '<span class="chip crypto">crypto</span>' : '') +
-      (p.assetClass !== 'crypto' && w > s.settings.limits.maxPositionPct ? '<span class="chip over">over limit</span>' : '');
+      (D.positionCap(s, p) != null && w > D.positionCap(s, p) + 1e-9 ? '<span class="chip over">over limit</span>' : '');
     return { value, html: `<tr><td><span class="sym">${sym}</span>${chips}<div class="muted num" style="font-size:11px">${D.fmtQty({ symbol: sym, qty: p.qty })} · ${p1(w)}</div></td>
       <td class="r num">${D.usd(value)}</td><td class="r num ${cls(price / prev - 1)}">${D.pct(price / prev - 1, 1)}</td><td class="r num ${cls(u)}">${u >= 0 ? '+' : ''}${D.usd(u)}</td></tr>` };
   }).sort((a, b) => b.value - a.value);
@@ -87,13 +87,11 @@ function queuePanel(s) {
 function riskPanel(s) {
   const L = s.settings.limits, t = D.totals(s), snap = D.snapshot(s);
   const day = t.equity / s.startOfDayEquity - 1;
-  const stocks = Object.entries(snap.positions).filter(([, p]) => p.assetClass !== 'crypto');
-  const big = stocks.reduce((m, [sym, p]) => (p.qty * p.price > (m?.v || 0) ? { sym, v: p.qty * p.price } : m), null);
   const tech = (t.bySector.Tech || 0) / t.equity;
   return `<section class="panel"><h2>Risk <small>hard limits</small></h2>
     ${gauge('Daily loss', Math.max(0, -day), -L.dailyLossLimitPct, p1, day >= 0 ? `Up ${p1(day)} today. New buys stop at ${p1(L.dailyLossLimitPct)}.` : `New buys stop at ${p1(L.dailyLossLimitPct)}.`)}
-    ${gauge('Largest stock position', big ? big.v / t.equity : 0, L.maxPositionPct, p1, big ? big.sym : 'No stock positions')}
-    ${gauge('Tech exposure', tech, L.sectorLimits.Tech, p1)}
+    ${(lg => gauge('Largest position vs its cap', lg ? lg.weight : 0, lg ? lg.cap : L.maxPositionPct, p1, lg ? `${lg.sym} (${s.account.positions[lg.sym].assetClass === 'etf' ? 'ETF cap' : 'single-stock cap'})` : 'No positions'))(D.largestVsCap(s))}
+    ${L.sectorLimits?.Tech != null ? gauge('Tech exposure', tech, L.sectorLimits.Tech, p1) : `<div class="gauge"><div class="gtop"><span>Tech exposure</span><span class="num">${p1(tech)} · no cap</span></div></div>`}
     ${gauge('Crypto exposure', t.crypto / t.equity, L.maxCryptoPct, p1)}
     ${gauge('Drawdown from peak', Math.max(0, 1 - t.equity / s.peakEquity), L.maxDrawdownPct, p1, `Peak NAV ${D.usd(s.peakEquity)}.`)}
     <div class="gauge"><div class="gtop"><span>Cash floor</span><span class="num">${p1(t.cash / t.equity)} / min ${p1(L.minCashPct)}</span></div></div>

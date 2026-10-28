@@ -234,6 +234,16 @@ test('the rotation only rebalances every 21 trading days', () => {
   assert.ok(s.log.some(e => /Momentum/.test(e.text) && e.at.startsWith(s.sim.day)));
 });
 
+test('skipping ahead stops at the open where new proposals are waiting', () => {
+  const { s } = replayFund();
+  D.openDay(s);
+  for (const o of D.pending(s)) D.reject(s, o.id);
+  const ran = D.skipDays(s, 60);
+  assert.ok(ran <= 21, `ran ${ran} days`);
+  assert.ok(D.pending(s).length > 0, 'stopped with the rebalance proposals still open');
+  assert.equal(s.sim.tick, 0, 'at the market open');
+});
+
 test('a replay fund saves small, reloads, and replays the same market', () => {
   const { s } = replayFund();
   D.openDay(s);
@@ -252,4 +262,17 @@ test('a replay fund ends cleanly when the history runs out', () => {
   assert.equal(s.sim.ended, true);
   assert.equal(D.marketOpen(s), false);
   assert.ok(s.log.some(e => /latest data/.test(e.text)));
+});
+
+test('ETF holdings are measured against the ETF cap on screen too', () => {
+  const { s } = replayFund();
+  D.openDay(s);
+  for (const o of D.pending(s)) D.approve(s, o.id);
+  const lg = D.largestVsCap(s);
+  assert.equal(lg.cap, s.settings.limits.maxEtfPct);
+  assert.ok(lg.weight < lg.cap);
+  const anyEtf = Object.values(s.account.positions)[0];
+  assert.equal(D.positionCap(s, anyEtf), 0.35);
+  assert.equal(D.positionCap(s, { assetClass: 'stock' }), 0.10);
+  assert.equal(D.positionCap(s, { assetClass: 'crypto' }), null);
 });

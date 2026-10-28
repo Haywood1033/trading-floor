@@ -122,6 +122,24 @@ export const marketOpen = state => !state.sim.ended && state.sim.tick < TICKS_PE
 export const assetClassOf = sym => (CRYPTO.includes(sym) ? 'crypto' : metaFor(sym) ? 'etf' : 'stock');
 export const sectorFor = sym => metaFor(sym)?.sector || sectorOf(sym, assetClassOf(sym));
 export const universe = state => (isReplay(state) ? ROTATION_UNIVERSE.filter(s => state.sim.history[s]) : DEFAULT_UNIVERSE);
+// The single-position cap that applies to a holding: ETFs have their own (diversified funds),
+// crypto is capped as a group instead, everything else uses the single-stock cap.
+export function positionCap(state, p) {
+  const L = state.settings.limits;
+  return p.assetClass === 'crypto' ? null : p.assetClass === 'etf' ? (L.maxEtfPct ?? L.maxPositionPct) : L.maxPositionPct;
+}
+// The holding closest to its cap: { sym, weight, cap } or null.
+export function largestVsCap(state) {
+  const t = totals(state);
+  let best = null;
+  for (const [sym, p] of Object.entries(state.account.positions)) {
+    const cap = positionCap(state, p);
+    if (cap == null) continue;
+    const weight = p.qty * state.sim.prices[sym] / t.equity;
+    if (!best || weight / cap > best.weight / best.cap) best = { sym, weight, cap };
+  }
+  return best;
+}
 export const daysToRebalance = state => Math.max(0, (state.nextRebalance ?? 0) - (state.daysRun ?? 0));
 export function rotationView(state) {
   return rankUniverse(state.sim.history, universe(state));
@@ -458,9 +476,16 @@ export function closeDay(state) {
   openDay(state);
 }
 
-// Runs whole trading days (to the close of the n-th day).
+// Runs up to n whole trading days, but stops at the first market open where new proposals are
+// waiting, so a skip never lets the quants' proposals expire unseen. Returns days run.
 export function skipDays(state, n) {
-  for (let i = 0; i < n && !state.sim.ended; i++) skipToClose(state);
+  let i = 0;
+  while (i < n && !state.sim.ended) {
+    skipToClose(state);
+    i++;
+    if (pending(state).length) break;
+  }
+  return i;
 }
 
 // Grades open calls whose horizon has passed, using simulated closes.
