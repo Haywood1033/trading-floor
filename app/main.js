@@ -127,10 +127,13 @@ function renderHeader() {
   $('haltTime').textContent = state.kill.at || '';
   $('killBtn').disabled = state.kill.halted;
   const n = D.pending(state).length;
-  $('nav').innerHTML = DESKS.map(d => `<a href="#${d.id}" ${desk() === d.id ? 'aria-current="page"' : ''}>${d.name}${d.id === 'floor' && n ? `<span class="badge">${n}</span>` : ''}</a>`).join('');
+  // Only rewrite the navigation when it changes: replacing a link while it is being pressed
+  // swallows the click.
+  const nav = DESKS.map(d => `<a href="#${d.id}" ${desk() === d.id ? 'aria-current="page"' : ''}>${d.name}${d.id === 'floor' && n ? `<span class="badge">${n}</span>` : ''}</a>`).join('');
+  if (nav !== lastNav) { $('nav').innerHTML = nav; lastNav = nav; }
 }
 
-let lastHtml = '';
+let lastHtml = '', lastNav = '';
 function render() {
   renderHeader();
   const d = DESKS.find(x => x.id === desk());
@@ -278,7 +281,10 @@ document.addEventListener('change', draft);
 document.addEventListener('pointerdown', e => {
   if (e.button !== 0) return;
   const el = e.target.closest('[data-act]');
-  if (el && !el.disabled) { e.preventDefault(); act(el); }
+  if (el && !el.disabled) { e.preventDefault(); act(el); return; }
+  // In-app links (desk navigation) also act on press, for the same reason.
+  const link = e.target.closest('a[href^="#"]');
+  if (link) { e.preventDefault(); if (location.hash !== link.hash) location.hash = link.hash; }
 });
 document.addEventListener('click', e => {
   const el = e.target.closest('[data-act]');
