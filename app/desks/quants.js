@@ -5,6 +5,8 @@ import { reviewPortfolio } from '../../src/quants/portfolioReviewer.js';
 import { runMomentum, DEFAULT_UNIVERSE } from '../../src/quants/momentum.js';
 import { esc, cls, p1, panel, seg, tierChip } from '../ui.js';
 import { metaFor } from '../../src/data/universe.js';
+import { mrSignals, RULES as MR } from '../../src/quants/meanReversion.js';
+import { cryptoSignals, COINS } from '../../src/quants/cryptoTrend.js';
 const metaName = sym => metaFor(sym)?.name || '';
 
 const RULES = {
@@ -27,24 +29,71 @@ const REPLAY_RULES = bt => {
   const pct = v => (v * 100).toFixed(1) + '%';
   return [
     'Ranks the 20 ETFs (US sectors, small caps, international, emerging, bonds, gold, real estate, commodities) on 12-month return skipping the latest month.',
-    'Every 21 trading days: holds the top 3 that are above their 200-day average with a positive score, about 31% of the fund each; sells any fund that drops out. Empty slots stay in cash.',
+    'Every 21 trading days: holds the top 3 that are above their 200-day average with a positive score, each a third of its sleeve; sells any fund that drops out. Empty slots stay in cash.',
     'This is exactly the strategy in the fair backtest on the Reports desk.',
     m && spy ? `Backtest ${bt.start.slice(0, 4)}–now, after costs: ${pct(m.cagr)} a year vs SPY ${pct(spy.cagr)}; worst drop ${pct(m.maxDrawdown)} vs SPY ${pct(spy.maxDrawdown)}. It has not beaten SPY on return; its case is smaller crashes.` : 'Backtest results load from state/backtest-etf.json.'
   ];
 };
+const pc = v => (v * 100).toFixed(1) + '%';
+const MR_RULES = bt => {
+  const f = bt?.meanReversion?.full?.strategies || [];
+  const m = f.find(x => x.id === 'mr'), lo = f.find(x => x.id === 'mrlow'), spy = f.find(x => x.id === 'spy');
+  return [
+    `Buys a fund when it is above its ${MR.trendDays}-day average and its 2-day RSI is under ${MR.entryRsi} (a sharp dip in an uptrend).`,
+    `Sells when it closes above its ${MR.exitDays}-day average (the bounce) or after ${MR.maxHoldDays} trading days. At most ${MR.maxPositions} positions, each a third of its sleeve; the most oversold first.`,
+    m && spy ? `Backtest ${bt.start.slice(0, 4)}–now: ${pc(m.cagr)} a year after 10 bps costs (${pc(lo.cagr)} at 3 bps) vs SPY ${pc(spy.cagr)}. It wins about 62% of trades but each earns ~0.2% before costs, and it trades ~80 times a year, so costs take nearly all of it. That is why it starts on paper.` : 'Backtest results load from state/backtest-etf.json.'
+  ];
+};
+const CRY_RULES = bt => {
+  const c = bt?.crypto?.strategies || [];
+  const t = c.find(x => x.id === 'cry'), b = c.find(x => x.id === 'btc');
+  return [
+    'Holds BTC and ETH, each only while it is above its 200-day average; otherwise that share sits in cash. Checked every 5 trading days.',
+    'Each coin gets an equal share of the crypto sleeve. ETH only counts once it has 200 days of history (from late 2018).',
+    t && b ? `Backtest ${bt.cryptoStart.slice(0, 4)}–now: ${pc(t.cagr)} a year vs ${pc(b.cagr)} holding BTC; worst year ${pc(t.worstYear.ret)} vs ${pc(b.worstYear.ret)}, worst drop ${pc(t.maxDrawdown)} vs ${pc(b.maxDrawdown)}. A smoother way to hold crypto, not a better return, and still extremely volatile.` : 'Backtest results load from state/backtest-etf.json.',
+    'Caution: crypto rose about 300-fold over that window, and was chosen for this desk knowing it. Past crypto returns say little about future ones.'
+  ];
+};
 const PLANNED = [
-  ['Earnings drift', 'Trades the drift after big earnings surprises. Needs an earnings data source (Phase 2).'],
-  ['Mean reversion', 'Buys quality names after sharp short-term drops.'],
-  ['Crypto trend', 'Holds BTC, ETH, SOL while above trend; cash below it.'],
-  ['Covered calls', 'Options income on holdings of 100+ shares (options desk, later).']
+  ['Earnings drift', 'Trades the drift after big earnings surprises. Needs historical earnings data, which has no free source without an account; and the fund trades ETFs, which have no earnings.'],
+  ['Covered calls', 'Options income on holdings of 100+ shares. Needs historical option prices to test, which are not freely available; and a $1,000 fund holds no 100-share positions.']
 ];
+const heldBy = (s, id) => {
+  const live = s.settings.quantModes[id] === 'live';
+  return live
+    ? Object.fromEntries(Object.entries(s.account.positions).filter(([, p]) => (D.ownersOf(p)[id] || 0) > 0).map(([x, p]) => [x, s.daysRun - (p.since?.[id] ?? p.openedRun ?? s.daysRun)]))
+    : Object.fromEntries(Object.entries(s.paperBook?.[id] || {}).map(([x, since]) => [x, s.daysRun - since]));
+};
 
 function todayView(s, q) {
   const snap = D.snapshot(s);
+  if (q.id === 'mr') {
+    if (!D.isReplay(s)) return '<div class="empty">Runs on real-history funds only.</div>';
+    const held = heldBy(s, 'mr');
+    const { scan, exits } = mrSignals(s.sim.history, D.universe(s), held);
+    const live = s.settings.quantModes.mr === 'live';
+    return `<div class="pad muted" style="font-size:13px">${Object.keys(held).length ? `${live ? 'Holding' : 'Paper book'}: <b>${Object.entries(held).map(([x, d]) => `${x} (${d}d${exits.some(e => e.symbol === x) ? ', exits next open' : ''})`).join(', ')}</b>.` : `${live ? 'Holding' : 'Paper book'}: nothing.`} Checks every open.</div>
+      <div class="tablewrap"><table><thead><tr><th>Fund</th><th class="r">RSI(2)</th><th>Above 200-day</th><th>Status</th></tr></thead><tbody>
+      ${scan.slice(0, 10).map(r => `<tr><td><span class="sym">${r.symbol}</span>${r.symbol in held ? ' <span class="chip crypto">held</span>' : ''}<div class="qdesc">${esc(metaName(r.symbol))}</div></td>
+        <td class="r num ${r.rsi < MR.entryRsi ? 'down' : ''}">${r.rsi == null ? '-' : r.rsi.toFixed(1)}</td><td>${r.uptrend ? 'Yes' : 'No'}</td>
+        <td class="${r.signal ? 'up' : 'muted'}">${r.signal ? 'dip: entry signal' : r.uptrend ? 'no dip' : 'downtrend: skipped'}</td></tr>`).join('')}</tbody></table></div>
+      <div class="pad muted" style="font-size:12px">The 10 most oversold funds, lowest RSI first.</div>`;
+  }
+  if (q.id === 'cry') {
+    if (!D.isReplay(s)) return '<div class="empty">Runs on real-history funds only.</div>';
+    const held = heldBy(s, 'cry');
+    const { scan } = cryptoSignals(s.sim.history, COINS);
+    const due = Math.max(0, (s.nextCrypto ?? 0) - s.daysRun);
+    return `<div class="pad muted" style="font-size:13px">${due ? `Next weekly check in ${due} trading day${due === 1 ? '' : 's'}.` : 'Checks at the next open.'}</div>
+      <div class="tablewrap"><table><thead><tr><th>Coin</th><th class="r">Price</th><th class="r">200-day avg</th><th>Trend</th></tr></thead><tbody>
+      ${scan.map(r => `<tr><td><span class="sym">${r.symbol}</span>${r.symbol in held ? ' <span class="chip crypto">held</span>' : ''}</td>
+        <td class="r num">${r.price == null ? '-' : D.usd(r.price)}</td><td class="r num">${r.average == null ? '-' : D.usd(r.average)}</td>
+        <td class="${r.above ? 'up' : r.above === false ? 'down' : 'muted'}">${r.above == null ? 'not enough history yet' : r.above ? 'above: hold' : 'below: cash'}</td></tr>`).join('')}</tbody></table></div>`;
+  }
   if (q.id === 'mom' && D.isReplay(s)) {
     const ranked = D.rotationView(s);
     const picks = ranked.slice(0, 3).filter(r => r.ok).map(r => r.symbol);
-    const held = Object.entries(s.account.positions).filter(([, p]) => p.openedBy === 'mom').map(([x]) => x);
+    const held = Object.entries(s.account.positions).filter(([, p]) => (D.ownersOf(p).mom || 0) > 0).map(([x]) => x);
     const due = D.daysToRebalance(s);
     return `<div class="pad muted" style="font-size:13px">${due ? `Next rebalance in ${due} trading day${due === 1 ? '' : 's'}.` : 'Rebalances at the next open.'} Picks if it rebalanced now: <b>${picks.join(', ') || 'none (all cash)'}</b>.</div>
       <div class="tablewrap"><table><thead><tr><th>#</th><th>Fund</th><th class="r">12-1 return</th><th>Above 200-day</th><th>Status</th></tr></thead><tbody>
@@ -83,7 +132,13 @@ export function renderQuants(s, ui) {
     const cap = s.settings.quantAlloc[q.id];
     const used = D.quantExposure(s, q.id);
     const id = 'alloc-' + q.id;
-    const capField = q.id === 'rev' ? '<span class="muted">Sells only; no capital cap.</span>'
+    const sleeveId = 'sleeve-' + q.id;
+    const sv = s.settings.sleeves?.[q.id];
+    const capField = q.id === 'rev' ? `<span class="muted">${D.isReplay(s) ? 'Reviews only the positions you opened yourself; sells only.' : 'Sells only; no capital cap.'}</span>`
+      : D.isReplay(s) ? `<div class="field" style="grid-template-columns:minmax(0,1fr) 110px auto"><label for="${sleeveId}">Sleeve (% of the fund)</label>
+          <input id="${sleeveId}" data-draft inputmode="decimal" value="${esc(ui.drafts[sleeveId] ?? String(+((sv ?? 0) * 100).toFixed(1)))}">
+          <button class="btn" data-act="saveSleeve" data-q="${q.id}">Save</button>
+          <span class="hint">Sizes its trades from this share of the fund. Using ${D.usd(used)} (${p1(used / eq)}); buys beyond ${p1(cap ?? 0)} are blocked. All sleeves together: ${p1(D.sleeveTotal(s))}.</span></div>`
       : `<div class="field" style="grid-template-columns:minmax(0,1fr) 110px auto"><label for="${id}">Capital cap (% of NAV)</label>
           <input id="${id}" data-draft inputmode="decimal" placeholder="no cap" value="${esc(ui.drafts[id] ?? (cap == null ? '' : String(+(cap * 100).toFixed(1))))}">
           <button class="btn" data-act="saveAlloc" data-q="${q.id}">Save</button>
@@ -93,21 +148,21 @@ export function renderQuants(s, ui) {
           <div class="tile"><span class="label">Tier</span><span>${tierChip(q.tier)}</span><span class="sub">20 graded calls needed to rate</span></div>
           <div class="tile"><span class="label">Graded</span><span class="value">${q.graded}</span><span class="sub">${q.open} open</span></div>
           <div class="tile"><span class="label">Hit rate</span><span class="value">${q.graded ? p1(q.hitRate) : '-'}</span><span class="sub">${q.graded ? 'lower bound ' + p1(q.lowerBound) : 'no graded calls yet'}</span></div>
-          <div class="tile"><span class="label">Avg vs benchmark</span><span class="value ${cls(q.avgExcess)}">${q.graded ? D.pct(q.avgExcess, 1) : '-'}</span><span class="sub">per call, 63 days</span></div>
+          <div class="tile"><span class="label">Avg vs benchmark</span><span class="value ${cls(q.avgExcess)}">${q.graded ? D.pct(q.avgExcess, 1) : '-'}</span><span class="sub">per call, ${D.HORIZON[q.id] ?? 63} days</span></div>
         </div>
         <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap"><b>Mode</b>${seg('qmode', q.mode, [['live', 'Live'], ['paper', 'Paper'], ['off', 'Off']], `data-q="${q.id}"`)}
           <span class="muted" style="font-size:12px">Live: proposals go to your queue. Paper: calls are recorded and graded but never queued. Off: not run.</span></div>
         ${capField}
       </div>
-      <ul class="rules">${(q.id === 'mom' && D.isReplay(s) ? REPLAY_RULES(ui.backtest) : RULES[q.id]).map(r => `<li>${esc(r)}</li>`).join('')}</ul>`)}
+      <ul class="rules">${(q.id === 'mom' && D.isReplay(s) ? REPLAY_RULES(ui.backtest) : q.id === 'mr' ? MR_RULES(ui.backtest) : q.id === 'cry' ? CRY_RULES(ui.backtest) : RULES[q.id]).map(r => `<li>${esc(r)}</li>`).join('')}</ul>`)}
       <div class="cols-2">
-        ${panel(q.id === 'mom' ? (D.isReplay(s) ? 'Rotation ranking' : "Today's ranking") : "Today's review", 'from the latest closes', todayView(s, q))}
-        ${panel('Call history', 'graded 63 trading days after each call', history(s, q))}
+        ${panel({ mom: D.isReplay(s) ? 'Rotation ranking' : "Today's ranking", mr: 'Dip scan', cry: 'Trend check' }[q.id] || "Today's review", 'from the latest closes', todayView(s, q))}
+        ${panel('Call history', `graded ${D.HORIZON[q.id] ?? 63} trading days after each call`, history(s, q))}
       </div>`;
   }).join('');
   const planned = PLANNED.map(([n, d]) => `<div class="statecard"><b>${n}</b><span>${esc(d)}</span></div>`).join('');
   return `<div class="desk-head"><h1>Quants</h1><p>Each quant proposes; you decide. Its record is built from every call it makes, approved or not, graded against the benchmark.</p></div>
     ${ui.formError ? `<div class="down" role="alert">${esc(ui.formError)}</div>` : ''}
     ${cards}
-    ${panel('Not built yet', '', planned)}`;
+    ${panel('Not built: no honest way to test them yet', '', planned)}`;
 }

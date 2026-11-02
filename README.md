@@ -86,6 +86,15 @@ alone does not fit a live trading loop.
 - `app/sim.js`: synthetic market (fallback if history can't load, and tests)
 - `src/quants/rotation.js`: the momentum rotation the backtest measures (top 3 ETFs, rebalanced
   every 21 trading days), used as the Momentum quant in replay funds
+- `src/quants/meanReversion.js`: RSI(2) dip buying in uptrends (exit on the 5-day average or
+  after 10 days, up to 3 positions); on paper by default because it shows no edge after costs
+- `src/quants/cryptoTrend.js`: BTC and ETH held only above their 200-day average, checked weekly
+
+### Sleeves
+
+In replay funds each quant sizes from its own share of the fund: rotation 60%, mean reversion
+20%, crypto trend 15%, 5% cash. The risk check caps each at its sleeve plus 5%. Positions record
+how much each quant owns, so two quants can hold the same fund and each sells only its own part.
 - `app/desk.js`: the fund and every manager/desk action; all fills go through the risk manager
 - `app/floor.js`: Floor desk; `app/desks/*.js`: the other six desks; `app/ui.js`: shared charts, gauges, bars
 - `src/node/fileStores.js`: file-backed stores for Node scripts (kept out of the browser engine)
@@ -146,8 +155,10 @@ Then `npm run sync`.
 
 The backtest uses ETFs that all existed from 2006, so the list isn't survivorship-biased. It
 simulates real holdings with monthly rebalancing, 10 bps cost per dollar traded, and next-day
-execution, and compares momentum rotation against SPY, 60/40 and equal weight, over the full
-period and two halves (to 2016, and 2017 on).
+execution (1 bp on moves into SHY, the cash fund), and compares momentum rotation against SPY,
+60/40 and equal weight, over the full period and two halves (to 2016, and 2017 on). It also tests
+mean reversion (against SPY and equal weight, with a 3 bps cost-sensitivity row), crypto trend
+(against holding BTC, from mid-2015), and the whole desk in sleeves, with and without crypto.
 
 ## Server sync and login (Vercel)
 

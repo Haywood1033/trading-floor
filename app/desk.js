@@ -9,6 +9,8 @@ import * as replay from './replay.js';
 import { TICKS_PER_DAY } from './sim.js';
 import { runRotation, rankUniverse } from '../src/quants/rotation.js';
 import { ROTATION_UNIVERSE, metaFor } from '../src/data/universe.js';
+import { mrSignals, RULES as MR_RULES } from '../src/quants/meanReversion.js';
+import { cryptoSignals, COINS, RULES as CRY_RULES } from '../src/quants/cryptoTrend.js';
 import { sampleBars } from '../src/data/sample.js';
 import { reviewPortfolio } from '../src/quants/portfolioReviewer.js';
 import { runMomentum, DEFAULT_UNIVERSE } from '../src/quants/momentum.js';
@@ -36,8 +38,17 @@ export const REBALANCE_DAYS = 21;
 export const CRYPTO = ['BTC', 'ETH', 'SOL'];
 export const QUANTS = [
   { id: 'rev', name: 'Portfolio reviewer', desc: 'Flags stale holdings and oversized positions; proposes sells and trims.' },
-  { id: 'mom', name: 'Momentum', desc: 'Buys 12-1 month return leaders above their 200-day average, ~5% each.' }
+  { id: 'mom', name: 'Momentum', desc: 'Buys 12-1 month return leaders above their 200-day average, ~5% each.' },
+  { id: 'mr', name: 'Mean reversion', desc: 'Buys sharp dips (RSI 2 under 10) in funds above their 200-day average; sells on the bounce or after 10 days.' },
+  { id: 'cry', name: 'Crypto trend', desc: 'Holds BTC and ETH only while each is above its 200-day average; checked weekly.' }
 ];
+// Days after a call it is graded: matches how long each quant expects to hold.
+export const HORIZON = { rev: 63, mom: 63, mr: 10, cry: 21 };
+// Share of the fund each quant sizes its positions from (replay funds). The hard cap that the
+// risk check enforces is the sleeve plus SLEEVE_SLACK, so price drift doesn't block top-ups.
+export const DEFAULT_SLEEVES = { mom: 0.60, mr: 0.20, cry: 0.15 };
+export const SLEEVE_SLACK = 0.05;
+const QUANT_OWNED = ['mom', 'mr', 'cry'];
 export const quantName = id => (id === 'manager' ? 'Manager' : QUANTS.find(q => q.id === id)?.name || id);
 // Most of the fund each quant's positions may hold (buys beyond it are blocked). null = no cap.
 export const DEFAULT_ALLOC = { rev: null, mom: 0.6 };
@@ -50,6 +61,21 @@ export function migrate(state) {
   }
   state.daysRun ??= state.curve.daily.length;
   state.nextRebalance ??= 0;
+  state.nextCrypto ??= 0;
+  state.paperBook ??= { mr: {}, cry: {} };
+  for (const p of Object.values(state.account.positions)) {
+    p.owners ??= { [p.openedBy || 'manager']: p.qty };
+    p.since ??= { [p.openedBy || 'manager']: p.openedRun ?? 0 };
+  }
+  if (state.sim.mode === 'replay') {
+    state.settings.sleeves ??= { ...DEFAULT_SLEEVES };
+    state.settings.quantModes.mr ??= 'paper';
+    state.settings.quantModes.cry ??= 'live';
+    for (const id of ['mom', 'mr', 'cry']) state.settings.quantAlloc[id] ??= +(state.settings.sleeves[id] + SLEEVE_SLACK).toFixed(4);
+  } else {
+    state.settings.quantModes.mr ??= 'off';
+    state.settings.quantModes.cry ??= 'off';
+  }
   state.peakEquity ??= Math.max(state.fund.capital, ...state.curve.daily.map(d => d.equity));
   state.fund.spyStart ??= state.sim.prices.SPY;
   state.settings.quantAlloc ??= { ...DEFAULT_ALLOC };
@@ -82,9 +108,11 @@ export function freshReplayState({ hist = MARKET, startDate, capital = DEFAULT_C
     fund: { name: 'Trading Floor', capital, inception: sim.day, spyStart: sim.prices.SPY, replay: true },
     sim,
     account: { cash: capital, positions: {}, realized: 0 },
-    startOfDayEquity: capital, peakEquity: capital, openedDay: null, daysRun: 0, nextRebalance: 0,
+    startOfDayEquity: capital, peakEquity: capital, openedDay: null, daysRun: 0, nextRebalance: 0, nextCrypto: 0, paperBook: { mr: {}, cry: {} },
     orders: [], signals: [], log: [], kill: { halted: false },
-    settings: { mode: 'approval', speed: 1, limits: defaultLimitsFor(capital, { replay: true }), quantModes: { rev: 'live', mom: 'live' }, quantAlloc: { rev: null, mom: null } },
+    settings: { mode: 'approval', speed: 1, limits: defaultLimitsFor(capital, { replay: true }), quantModes: { rev: 'live', mom: 'live', mr: 'paper', cry: 'live' },
+      sleeves: { ...DEFAULT_SLEEVES },
+      quantAlloc: { rev: null, ...Object.fromEntries(Object.entries(DEFAULT_SLEEVES).map(([k, v]) => [k, +(v + SLEEVE_SLACK).toFixed(4)])) } },
     curve: { intraday: [capital], daily: [] },
     seq: 1
   };
@@ -182,11 +210,17 @@ export function washSaleWatch(state) {
     });
 }
 
+// ---------- position ownership
+// A position can be shared: each quant (or 'manager') owns part of it. owners: { id: qty },
+// since: { id: daysRun when that owner first bought }.
+export const ownersOf = p => p.owners || { [p.openedBy || 'manager']: p.qty };
+export const ownedQty = (state, sym, id) => ownersOf(state.account.positions[sym] || { owners: {} })[id] || 0;
+
 // ---------- quant capital allocation
 
 export function quantExposure(state, quantId) {
   let v = 0;
-  for (const [sym, p] of Object.entries(state.account.positions)) if (p.openedBy === quantId) v += p.qty * state.sim.prices[sym];
+  for (const [sym, p] of Object.entries(state.account.positions)) v += (ownersOf(p)[quantId] || 0) * state.sim.prices[sym];
   return v;
 }
 function allocationCheck(state, order) {
@@ -265,16 +299,69 @@ export function openDay(state) {
   const bars = state.sim.history;
   const snap = snapshot(state);
   const replayFund = isReplay(state);
-  const owned = id => Object.fromEntries(Object.entries(state.account.positions).filter(([, p]) => p.openedBy === id).map(([sym, p]) => [sym, p.qty]));
-  const notRotation = { ...snap, positions: Object.fromEntries(Object.entries(snap.positions).filter(([, p]) => p.openedBy !== 'mom')) };
+  const owned = id => Object.fromEntries(Object.entries(state.account.positions).map(([sym, p]) => [sym, ownersOf(p)[id] || 0]).filter(([, q]) => q > 0));
+  // The part of each position no quant owns (your own trades): what the reviewer reviews.
+  const notQuantOwned = { ...snap, positions: Object.fromEntries(Object.entries(snap.positions).map(([sym, p]) => {
+    const quantQty = QUANT_OWNED.reduce((a, id) => a + (ownersOf(p)[id] || 0), 0);
+    return [sym, { ...p, qty: +(p.qty - quantQty).toFixed(6), costBasis: p.costBasis * (1 - quantQty / p.qty) }];
+  }).filter(([, p]) => p.qty > 1e-9)) };
+  const equity = totals(state).equity;
+  const sleeve = id => equity * (state.settings.sleeves?.[id] ?? 0);
+  const minOrder = state.settings.limits.minOrderValue || 0;
+  const live = id => state.settings.quantModes[id] === 'live';
+  // Positions a quant holds: real ones when live, its paper book when on paper.
+  const book = id => live(id)
+    ? Object.fromEntries(Object.entries(state.account.positions).filter(([, p]) => (ownersOf(p)[id] || 0) > 0).map(([sym, p]) => [sym, { qty: ownersOf(p)[id], since: p.since?.[id] ?? p.openedRun ?? state.daysRun }]))
+    : Object.fromEntries(Object.entries(state.paperBook[id] || {}).map(([sym, since]) => [sym, { qty: 0, since }]));
+  const buyQty = (sym, dollars) => Math.floor(dollars / state.sim.prices[sym] * 1000) / 1000;
   const runs = {
-    // The reviewer watches everything the rotation doesn't own (your own trades, crypto).
-    rev: () => reviewPortfolio(replayFund ? notRotation : snap, bars, { limits: state.settings.limits, fractional: true }).proposals,
+    // The reviewer watches what the quants don't own (your own trades), in replay funds.
+    rev: () => reviewPortfolio(replayFund ? notQuantOwned : snap, bars, { limits: state.settings.limits, fractional: true }).proposals,
     mom: () => {
       if (!replayFund) return runMomentum(snap, bars, { universe: DEFAULT_UNIVERSE, fractional: true, minOrderValue: state.settings.limits.minOrderValue || 0 }).proposals;
       if (state.daysRun < state.nextRebalance) return null;                     // not a rebalance day
       state.nextRebalance = state.daysRun + REBALANCE_DAYS;
-      return runRotation(snap, bars, { universe: universe(state), held: owned('mom'), cashBuffer: 0.06, minOrderValue: state.settings.limits.minOrderValue || 0, metaFor }).proposals;
+      return runRotation(snap, bars, { universe: universe(state), held: owned('mom'), cashBuffer: 1 - (state.settings.sleeves?.mom ?? 0.94), minOrderValue: minOrder, metaFor }).proposals;
+    },
+    mr: () => {
+      if (!replayFund) return null;
+      const held = book('mr');
+      const days = Object.fromEntries(Object.entries(held).map(([s, h]) => [s, state.daysRun - h.since]));
+      const { exits, entries } = mrSignals(bars, universe(state), days);
+      if (!live('mr')) {                                 // paper: keep the paper book in step
+        for (const e of exits) delete state.paperBook.mr[e.symbol];
+        for (const e of entries) state.paperBook.mr[e.symbol] = state.daysRun;
+      }
+      const per = sleeve('mr') / MR_RULES.maxPositions;
+      return [
+        ...exits.filter(e => held[e.symbol].qty > 0).map(e => ({ quantId: 'mr', symbol: e.symbol, side: 'sell', qty: held[e.symbol].qty, assetClass: 'etf', record: false, confidence: 0.55,
+          thesis: `Mean reversion exit: ${e.symbol} ${e.why}. Sell all.` })),
+        ...entries.map(e => ({ quantId: 'mr', symbol: e.symbol, side: 'buy', qty: buyQty(e.symbol, per), assetClass: 'etf', confidence: 0.52,
+          thesis: `Mean reversion entry: ${e.symbol} (${metaFor(e.symbol)?.name || ''}) ${e.why}. Buy ~$${Math.round(per)} (a third of the mean reversion sleeve); exits on the bounce or after ${MR_RULES.maxHoldDays} days.` }))
+          .filter(p => p.qty * state.sim.prices[p.symbol] >= minOrder)
+      ];
+    },
+    cry: () => {
+      if (!replayFund) return null;
+      if (state.daysRun < (state.nextCrypto ?? 0)) return null;           // weekly check
+      state.nextCrypto = state.daysRun + CRY_RULES.everyDays;
+      const coins = COINS.filter(c => (bars[c]?.length || 0) > CRY_RULES.trendDays);
+      if (!coins.length) return [];
+      const { want, scan } = cryptoSignals(bars, coins);
+      const held = book('cry');
+      const per = sleeve('cry') / coins.length;
+      const info = sym => { const x = scan.find(y => y.symbol === sym); return `price ${usd(x.price)} vs 200-day average ${usd(x.average)}`; };
+      const out = [];
+      for (const sym of Object.keys(held)) if (!want.includes(sym)) {
+        if (!live('cry')) delete state.paperBook.cry[sym];
+        if (held[sym].qty > 0) out.push({ quantId: 'cry', symbol: sym, side: 'sell', qty: held[sym].qty, assetClass: 'crypto', confidence: 0.55, thesis: `Crypto trend exit: ${sym} fell below its 200-day average (${info(sym)}). Sell all; hold cash until it recovers.` });
+      }
+      for (const sym of want) if (!held[sym]) {
+        if (!live('cry')) state.paperBook.cry[sym] = state.daysRun;
+        const qty = Math.floor(per / state.sim.prices[sym] * 1e5) / 1e5;
+        if (qty * state.sim.prices[sym] >= minOrder) out.push({ quantId: 'cry', symbol: sym, side: 'buy', qty, assetClass: 'crypto', confidence: 0.55, thesis: `Crypto trend: ${sym} is above its 200-day average (${info(sym)}). Buy ~$${Math.round(per)} (its share of the crypto sleeve); held until it closes below the average on a weekly check.` });
+      }
+      return out;
     }
   };
   const t = tracker(state);
@@ -288,9 +375,9 @@ export function openDay(state) {
     for (const p of proposals) {
       p.price = state.sim.prices[p.symbol];
       const benchmark = p.assetClass === 'crypto' && p.symbol !== 'BTC' ? 'BTC' : 'SPY';
-      t.record(p, { benchmark, benchEntry: state.sim.prices[benchmark], issuedOn: state.sim.day });
+      if (p.record !== false) t.record(p, { benchmark, benchEntry: state.sim.prices[benchmark], issuedOn: state.sim.day, horizonDays: HORIZON[q.id] ?? 63 });
       if (mode === 'paper') continue;
-      if (pending(state).some(o => o.symbol === p.symbol && o.side === p.side)) continue;
+      if (pending(state).some(o => o.symbol === p.symbol && o.side === p.side && o.quantId === q.id)) continue;
       state.orders.push({
         id: state.seq++, status: 'pending', created: state.sim.day, quantId: q.id,
         symbol: p.symbol, side: p.side, qty: p.qty, proposedQty: p.qty, sector: p.sector || sectorFor(p.symbol),
@@ -324,19 +411,32 @@ export function fill(state, id, approvedBy) {
   let realized = null;
   if (o.side === 'buy') {
     a.cash -= value;
+    const owners = pos ? { ...ownersOf(pos) } : {};
+    owners[o.quantId] = +((owners[o.quantId] || 0) + o.qty).toFixed(6);
+    const since = { ...(pos?.since || {}) };
+    since[o.quantId] ??= state.daysRun;
     a.positions[o.symbol] = pos
-      ? { ...pos, qty: +(pos.qty + o.qty).toFixed(6), costBasis: pos.costBasis + value }
-      : { qty: o.qty, costBasis: value, sector: o.sector, assetClass: o.assetClass, opened: state.sim.day, openedBy: o.quantId };
+      ? { ...pos, qty: +(pos.qty + o.qty).toFixed(6), costBasis: pos.costBasis + value, owners, since }
+      : { qty: o.qty, costBasis: value, sector: o.sector, assetClass: o.assetClass, opened: state.sim.day, openedBy: o.quantId, openedRun: state.daysRun, owners, since };
   } else {
     const basisOut = pos.costBasis * (o.qty / pos.qty);
     realized = value - basisOut;
     o.realized = realized;
-    o.attribution = pos.openedBy || 'manager';
+    // The seller's own shares go first; anything beyond that comes out of the other owners pro rata.
+    const owners = { ...ownersOf(pos) };
+    const fromSeller = Math.min(owners[o.quantId] || 0, o.qty);
+    o.attribution = fromSeller > 0 ? o.quantId : (pos.openedBy || 'manager');
+    if (fromSeller) owners[o.quantId] = +(owners[o.quantId] - fromSeller).toFixed(6);
+    let rest = o.qty - fromSeller;
+    const others = Object.values(owners).reduce((x, y) => x + y, 0);
+    if (rest > 1e-9 && others > 0) for (const k of Object.keys(owners)) owners[k] = +(owners[k] - rest * owners[k] / others).toFixed(6);
+    const since = { ...(pos.since || {}) };
+    for (const k of Object.keys(owners)) if (owners[k] <= 1e-9) { delete owners[k]; delete since[k]; }
     a.realized += realized;
     a.cash += value;
     const left = +(pos.qty - o.qty).toFixed(6);
     if (left <= 1e-9) delete a.positions[o.symbol];
-    else a.positions[o.symbol] = { ...pos, qty: left, costBasis: pos.costBasis - basisOut };
+    else a.positions[o.symbol] = { ...pos, qty: left, costBasis: pos.costBasis - basisOut, owners, since };
   }
   Object.assign(o, { status: 'filled', filledAt: `${state.sim.day} ${clock(state)}`, fillPrice: price, approvedBy });
   log(state, 'fill', `${o.side.toUpperCase()} ${fmtQty(o)} ${o.symbol} @ ${usd(price, 2)} (${usd(value)})` +
@@ -412,6 +512,16 @@ export function resetLimits(state) {
   state.settings.limits = defaultLimitsFor(state.fund.capital, { replay: isReplay(state) });
   log(state, 'system', 'Risk limits reset to defaults.');
 }
+// Sets a quant's sleeve (share of the fund it sizes from) and its hard cap (sleeve + slack).
+export function setSleeve(state, id, value) {
+  const old = state.settings.sleeves[id];
+  if (old === value) return;
+  state.settings.sleeves[id] = value;
+  state.settings.quantAlloc[id] = +(value + SLEEVE_SLACK).toFixed(4);
+  log(state, 'system', `${quantName(id)} sleeve ${(old * 100).toFixed(0)}% → ${(value * 100).toFixed(0)}% of the fund.`);
+}
+export const sleeveTotal = state => Object.values(state.settings.sleeves || {}).reduce((a, b) => a + b, 0);
+
 export function setQuantAlloc(state, id, value) {
   const old = state.settings.quantAlloc[id];
   if (old === value) return;

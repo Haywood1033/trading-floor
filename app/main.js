@@ -204,6 +204,7 @@ function act(el) {
     }
     case 'preset': ui.drafts['nf-date'] = v; break;
     case 'btPeriod': ui.btPeriod = v; break;
+    case 'mrPeriod': ui.mrPeriod = v; break;
     case 'newFund': {
       const start = ui.drafts['nf-date'] || DEFAULT_START, cap = Number(ui.drafts['nf-cap'] ?? D.DEFAULT_CAPITAL);
       if (!(cap >= 100 && cap <= 10_000_000)) { ui.formError = 'Starting capital must be between $100 and $10,000,000.'; break; }
@@ -245,6 +246,17 @@ function act(el) {
       if (raw.trim() === '') D.setQuantAlloc(state, q, null);
       else { const n = Number(raw); if (!Number.isFinite(n) || n < 0 || n > 100) { ui.formError = 'Capital cap must be a percent from 0 to 100, or blank for no cap.'; break; } D.setQuantAlloc(state, q, n / 100); }
       delete ui.drafts['alloc-' + q]; ui.formError = '';
+      break;
+    }
+    case 'saveSleeve': {
+      const q = el.dataset.q, raw = ui.drafts['sleeve-' + q];
+      if (raw === undefined) break;
+      const n = Number(raw);
+      if (!Number.isFinite(n) || n < 0 || n > 100) { ui.formError = 'A sleeve must be a percent from 0 to 100.'; break; }
+      const others = D.sleeveTotal(state) - (state.settings.sleeves[q] || 0);
+      if (others + n / 100 > 0.95 + 1e-9) { ui.formError = `Sleeves would total ${((others + n / 100) * 100).toFixed(0)}%; keep them at 95% or less so the cash floor holds.`; break; }
+      D.setSleeve(state, q, n / 100);
+      delete ui.drafts['sleeve-' + q]; ui.formError = '';
       break;
     }
     case 'export': exportFund(); return;
