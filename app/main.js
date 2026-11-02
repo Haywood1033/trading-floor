@@ -79,7 +79,7 @@ function adopt(next, message) {
   state = D.migrate(next);
   save(true);
   lastHtml = '';
-  render();
+  render({ background: true });
   schedule();
   if (message) toast(message, true);
 }
@@ -141,8 +141,16 @@ function renderHeader() {
 }
 
 let lastHtml = '', lastNav = '';
-function render() {
+// A field on the desk is in use (an open dropdown, or a text box being typed in).
+const editing = () => {
+  const a = document.activeElement;
+  return !!a && $('desk').contains(a) && /^(SELECT|INPUT|TEXTAREA)$/.test(a.tagName);
+};
+// background: a redraw from the clock or another device, not from something you did. Those
+// wait while you are using a field: rebuilding the desk would close an open dropdown.
+function render({ background = false } = {}) {
   renderHeader();
+  if (background && editing()) return;
   const d = DESKS.find(x => x.id === desk());
   const html = d.render(state, ui);
   if (html === lastHtml) return;
@@ -169,7 +177,7 @@ function schedule() {
   // each second whether it has gone quiet, in which case this device takes over.
   if (!claim && !sync.holdsClock()) { timer = setTimeout(() => { renderHeader(); schedule(); }, 1000); return; }
   timer = setTimeout(() => {
-    D.tick(state); save(); render();
+    D.tick(state); save(); render({ background: true });
     if (Date.now() - lastPush > 10000) pushNow();
     schedule();
   }, 1000 / speed);
@@ -312,6 +320,8 @@ function draft(e) {
 }
 document.addEventListener('input', draft);
 document.addEventListener('change', draft);
+// Leaving a field: catch up on anything that changed while it was in use.
+document.addEventListener('focusout', e => { if ($('desk').contains(e.target)) setTimeout(() => render(), 0); });
 
 // Act on pointerdown so a re-render between press and release can't swallow the click;
 // keyboard activation still arrives as a click with detail 0.
