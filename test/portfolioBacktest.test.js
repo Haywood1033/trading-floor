@@ -63,3 +63,40 @@ test('a fixed mix rebalances back to target', () => {
   const r = simulate(h, fixedMix({ A: 0.5, B: 0.5 }), { from: h.dates[0], costBps: 0 });
   assert.ok(r.rebalances > 5 && r.turnoverPerYear > 0);
 });
+
+test('a strategy can skip a day (null): no trades and no costs', () => {
+  const h = hist(300, { A: () => 0.001 });
+  let calls = 0;
+  const strat = () => (calls++ === 0 ? { A: 1 } : null);
+  const r = simulate(h, strat, { from: h.dates[0], every: 1, costBps: 10 });
+  assert.equal(r.rebalances, 1);
+  assert.ok(Math.abs(r.costs - 10) < 1e-6);
+  assert.ok(calls > 200);
+});
+
+test('mean reversion strategy enters dips, exits bounces, and keeps held weights', async () => {
+  const { meanReversion } = await import('../src/portfolioBacktest.js');
+  // A steady uptrend with a sharp 3-day dip every 40 days, then recovery.
+  const h = hist(700, { A: i => (i % 40 >= 37 ? -0.03 : 0.003), SHY: () => 0 });
+  const r = simulate(h, meanReversion(['A']), { from: h.dates[0], every: 1, costBps: 10 });
+  assert.ok(r.rebalances > 10, `traded ${r.rebalances} times`);   // enters each dip, exits each bounce or time stop
+  assert.ok(r.equity.every(e => e.value > 0));                    // profitability is for the real-data backtest
+});
+
+test('crypto trend holds coins above trend and cash otherwise', async () => {
+  const { cryptoTrend } = await import('../src/portfolioBacktest.js');
+  const h = hist(400, { BTC: i => (i < 250 ? 0.003 : -0.004), ETH: () => -0.002, SHY: () => 0 });
+  const strat = cryptoTrend();
+  const early = strat(h, 240);
+  assert.ok(Math.abs(early.BTC - 0.5) < 1e-9 && Math.abs(early.SHY - 0.5) < 1e-9);
+  assert.deepEqual(Object.keys(strat(h, 399)), ['SHY']);
+});
+
+test('a missing close carries the last known price instead of zero', () => {
+  const h = hist(300, { BTC: () => 0.001 });
+  h.closes.BTC[150] = null; h.closes.BTC[299] = null;
+  const r = simulate(h, buyAndHold('BTC'), { from: h.dates[0], costBps: 0 });
+  assert.ok(r.equity[150].value > 10000 && r.equity.at(-1).value > 10000);
+  const m = metrics(r.equity);
+  assert.ok(Number.isFinite(m.cagr) && m.maxDrawdown > -0.01);
+});

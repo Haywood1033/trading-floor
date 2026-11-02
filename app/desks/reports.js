@@ -4,6 +4,44 @@ import * as D from '../desk.js';
 import { esc, cls, p1, panel, lineChart, tierChip, seg } from '../ui.js';
 
 const pc = v => (v * 100).toFixed(1) + '%';
+// A results table for any set of backtested strategies; `hl` is the row to highlight.
+function resultsTable(list, hl) {
+  return `<div class="tablewrap"><table><thead><tr><th>Strategy</th><th class="r">Per year</th><th class="r">Volatility</th><th class="r">Sharpe</th><th class="r">Worst drop</th><th class="r">Worst year</th><th class="r">$10k became</th></tr></thead><tbody>
+    ${list.map(x => `<tr class="${x.id === hl ? 'hl' : ''}"><td><b>${esc(x.name)}</b>${x.note ? `<div class="qdesc">${esc(x.note)}</div>` : ''}</td>
+      <td class="r num">${pc(x.cagr)}</td><td class="r num">${pc(x.vol)}</td><td class="r num">${x.sharpe.toFixed(2)}</td>
+      <td class="r num down">${pc(x.maxDrawdown)}</td><td class="r num">${x.worstYear?.year} <span class="${cls(x.worstYear?.ret)}">${pc(x.worstYear?.ret ?? 0)}</span></td>
+      <td class="r num">$${Math.round(x.growthOf10k).toLocaleString('en-US')}</td></tr>`).join('')}</tbody></table></div>`;
+}
+
+function otherQuantsPanels(bt, ui) {
+  if (!bt?.meanReversion) return '';
+  const pid = ui.mrPeriod || 'full';
+  const mrSet = bt.meanReversion[pid].strategies;
+  const mr = mrSet.find(x => x.id === 'mr'), lo = mrSet.find(x => x.id === 'mrlow'), spy = mrSet.find(x => x.id === 'spy');
+  const c = bt.crypto.strategies, t = c.find(x => x.id === 'cry'), b = c.find(x => x.id === 'btc');
+  const k = bt.combined.strategies, desk = k.find(x => x.id === 'desk'), nocry = k.find(x => x.id === 'nocry'), kspy = k.find(x => x.id === 'spy');
+  const curve = id => k.find(x => x.id === id)?.curve || [];
+  const kc = curve('spy');
+  const chart = lineChart([
+    { name: 'SPY', color: 'var(--muted)', dash: true, values: kc.map(p => p[1] / 1000) },
+    { name: 'Combined desk', color: 'var(--accent)', values: curve('desk').map(p => p[1] / 1000) },
+    { name: 'Without crypto', color: 'var(--up)', values: curve('nocry').map(p => p[1] / 1000) }
+  ], [kc[0]?.[0], kc.at(-1)?.[0]], { fmtY: v => '$' + v.toFixed(0) + 'k' });
+  return `
+    ${panel('Mean reversion backtest', `same ETFs, ${bt.costBps} bps per trade`, `
+      <div class="search">${seg('mrPeriod', pid, Object.entries(bt.meanReversion).map(([key, v]) => [key, v.label]))}</div>
+      <div class="brief"><p>${pc(mr.cagr)} a year after costs, against ${pc(spy.cagr)} for SPY${lo ? `; ${pc(lo.cagr)} if trading costs were only 3 bps` : ''}. Its trades win often but earn too little each to survive costs, so <b>it runs on paper by default</b>.</p></div>
+      ${resultsTable(mrSet, 'mr')}`)}
+    ${panel('Crypto trend backtest', `${bt.cryptoStart} to ${bt.dataThrough}`, `
+      <div class="brief"><p>${pc(t.cagr)} a year against ${pc(b.cagr)} for holding BTC, with a worst year of ${pc(t.worstYear.ret)} against ${pc(b.worstYear.ret)}. A smoother way to hold crypto, not a better return, and it still fell ${pc(t.maxDrawdown)} at its worst.</p></div>
+      ${resultsTable(c, 'cry')}`)}
+    ${panel('The whole desk', `${bt.cryptoStart} to ${bt.dataThrough}, sleeves rebalanced monthly`, `
+      <div class="brief"><p>All quants together returned ${pc(desk.cagr)} a year against ${pc(kspy.cagr)} for SPY. <b>Without crypto it was ${pc(nocry.cagr)}</b>, behind SPY.</p>
+        <p class="warn">${esc(bt.combined.caution)}</p></div>
+      ${chart}
+      ${resultsTable(k, 'desk')}`)}`;
+}
+
 // The fair backtest from state/backtest-etf.json, with a plain-language reading of it.
 function backtestPanel(bt, ui) {
   if (!bt?.periods) return panel('Fair backtest', '', '<div class="empty">Backtest results did not load.</div>');
@@ -27,7 +65,7 @@ function backtestPanel(bt, ui) {
     { name: 'Rotation top 3', color: 'var(--accent)', values: curve('mom3').map(p => p[1] / 1000) },
     { name: '60/40', color: 'var(--up)', values: curve('6040').map(p => p[1] / 1000) }
   ], [c[0]?.[0], c.at(-1)?.[0]], { fmtY: v => '$' + v.toFixed(0) + 'k' });
-  return panel('Fair backtest', `ETFs, ${bt.start} to ${bt.dataThrough}, ${bt.costBps} bps per trade, next-day execution`, `
+  return panel('Momentum rotation backtest', `ETFs, ${bt.start} to ${bt.dataThrough}, ${bt.costBps} bps per trade, next-day execution`, `
     <div class="search">${seg('btPeriod', pid, Object.entries(bt.periods).map(([k, v]) => [k, v.label]))}</div>
     <div class="brief"><p>${verdict}</p>
       <p class="muted">Growth of $10,000, full period. Every fund here traded the whole time, so the list isn't picked with hindsight. Past results are not a forecast.</p></div>
@@ -71,7 +109,7 @@ export function renderReports(s, ui) {
   const rows = sources.map(src => {
     const realized = s.orders.filter(o => o.status === 'filled' && o.side === 'sell' && (o.attribution || 'manager') === src.id).reduce((a, o) => a + (o.realized || 0), 0);
     let unreal = 0, value = 0;
-    for (const [sym, p] of Object.entries(s.account.positions)) if ((p.openedBy || 'manager') === src.id) { const v = p.qty * s.sim.prices[sym]; value += v; unreal += v - p.costBasis; }
+    for (const [sym, p] of Object.entries(s.account.positions)) { const q = D.ownersOf(p)[src.id] || 0; if (q > 0) { const v = q * s.sim.prices[sym]; value += v; unreal += v - p.costBasis * q / p.qty; } }
     const trades = s.orders.filter(o => o.status === 'filled' && o.quantId === src.id).length;
     return `<tr><td><b>${src.name}</b></td><td class="r num">${trades}</td><td class="r num">${D.usd(value)}<div class="qdesc">${p1(value / eq)} of NAV</div></td>
       <td class="r num ${cls(realized)}">${realized >= 0 ? '+' : ''}${D.usd(realized)}</td><td class="r num ${cls(unreal)}">${unreal >= 0 ? '+' : ''}${D.usd(unreal)}</td>
@@ -105,6 +143,7 @@ export function renderReports(s, ui) {
 
   return `<div class="desk-head"><h1>Reports</h1><p>The evidence behind the strategy, what the desk did, and how the fund is doing.</p></div>
     ${backtestPanel(ui.backtest, ui)}
+    ${otherQuantsPanels(ui.backtest, ui)}
     ${panel('Daily brief', closed.length ? `${closed.length} closed day${closed.length === 1 ? '' : 's'}` : '', dailyBrief)}
     ${panel('Fund vs SPY', 'indexed to 100 at inception', chart)}
     ${panel('Performance by source', '', perf)}

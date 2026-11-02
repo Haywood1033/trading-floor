@@ -217,10 +217,55 @@ test('a replay fund starts on the chosen real date with rotation buys of about a
   assert.equal(s.sim.day, h.dates[300]);
   D.openDay(s);
   const p = D.pending(s);
-  assert.ok(p.length >= 2 && p.length <= 3);
-  assert.ok(p.every(o => o.quantId === 'mom' && o.side === 'buy' && o.assetClass === 'etf'));
+  const rot = p.filter(o => o.quantId === 'mom');
+  assert.ok(rot.length >= 2 && rot.length <= 3);
+  assert.ok(rot.every(o => o.side === 'buy' && o.assetClass === 'etf'));
+  for (const o of rot) assert.ok(Math.abs(o.qty * s.sim.prices[o.symbol] - 200) < 2, 'a third of the 60% sleeve');
   for (const o of p) assert.equal(D.approve(s, o.id).ok, true, `${o.symbol}: ${JSON.stringify(D.riskFor(s, o).checks.filter(c => !c.ok))}`);
   assert.ok(D.totals(s).cash / D.totals(s).equity > 0.05);
+});
+
+test('crypto trend buys coins above trend into its sleeve, weekly, and exits below trend', () => {
+  const { s } = replayFund();
+  D.openDay(s);
+  const c = D.pending(s).filter(o => o.quantId === 'cry');
+  assert.deepEqual(c.map(o => o.symbol), ['BTC']);                       // the only coin in this data
+  assert.ok(Math.abs(c[0].qty * s.sim.prices.BTC - 150) < 1, '15% sleeve');
+  assert.equal(D.approve(s, c[0].id).ok, true);
+  assert.equal(s.account.positions.BTC.openedBy, 'cry');
+  D.skipToClose(s);
+  assert.equal(D.pending(s).filter(o => o.quantId === 'cry').length, 0, 'no new call before the weekly check');
+  assert.equal(s.signals.find(x => x.quantId === 'cry').horizonDays, 21);
+});
+
+test('mean reversion on paper records entries without queuing, and keeps a paper book', () => {
+  const syms = { SPY: 0.0004, XLK: 0.0011, TLT: 0.0001, SHY: 0.00005 };
+  const h = synthHist(600, syms);
+  // A sharp two-day dip in XLK (days 298-299) that stays above its 200-day average.
+  for (const i of [298, 299]) h.closes.XLK[i] = +(h.closes.XLK[i - 1] * 0.975).toFixed(4);
+  for (let i = 300; i < 600; i++) h.closes.XLK[i] = +(h.closes.XLK[i - 1] * 1.002).toFixed(4);
+  D.setMarket(h);
+  const s = D.freshReplayState({ startDate: h.dates[300], capital: 1000 });
+  assert.equal(s.settings.quantModes.mr, 'paper');
+  D.openDay(s);
+  assert.equal(D.pending(s).filter(o => o.quantId === 'mr').length, 0, 'paper: nothing queued');
+  const call = s.signals.find(x => x.quantId === 'mr');
+  assert.ok(call && call.symbol === 'XLK' && call.horizonDays === 10);
+  assert.ok('XLK' in s.paperBook.mr);
+  // live mode queues the same entry, sized at a third of the 20% sleeve
+  const t = D.freshReplayState({ startDate: h.dates[300], capital: 1000 });
+  D.setQuantMode(t, 'mr', 'live');
+  D.openDay(t);
+  const o = D.pending(t).find(x => x.quantId === 'mr');
+  assert.ok(o && Math.abs(o.qty * t.sim.prices.XLK - 66.67) < 1);
+});
+
+test('sleeves set sizing and the hard cap together', () => {
+  const { s } = replayFund();
+  D.setSleeve(s, 'cry', 0.10);
+  assert.equal(s.settings.quantAlloc.cry, 0.15);
+  assert.ok(Math.abs(D.sleeveTotal(s) - 0.90) < 1e-9);
+  assert.match(s.log[0].text, /Crypto trend sleeve 15% → 10%/);
 });
 
 test('the rotation only rebalances every 21 trading days', () => {
@@ -275,4 +320,26 @@ test('ETF holdings are measured against the ETF cap on screen too', () => {
   assert.equal(D.positionCap(s, anyEtf), 0.35);
   assert.equal(D.positionCap(s, { assetClass: 'stock' }), 0.10);
   assert.equal(D.positionCap(s, { assetClass: 'crypto' }), null);
+});
+
+test('two quants can own parts of the same fund, and each sells only its own', () => {
+  const syms = { SPY: 0.0004, XLK: 0.0011, TLT: 0.0001, SHY: 0.00005 };
+  const h = synthHist(600, syms);
+  for (const i of [298, 299]) h.closes.XLK[i] = +(h.closes.XLK[i - 1] * 0.975).toFixed(4);
+  D.setMarket(h);
+  const s = D.freshReplayState({ startDate: h.dates[300], capital: 1000 });
+  D.setQuantMode(s, 'mr', 'live');
+  D.openDay(s);
+  const xlk = D.pending(s).filter(o => o.symbol === 'XLK');
+  assert.deepEqual(xlk.map(o => o.quantId).sort(), ['mom', 'mr']);
+  for (const o of xlk) assert.equal(D.approve(s, o.id).ok, true);
+  const owners = D.ownersOf(s.account.positions.XLK);
+  assert.ok(owners.mom > 0 && owners.mr > 0);
+  assert.ok(Math.abs(D.quantExposure(s, 'mr') - 66.67) < 2);
+  // mean reversion sells its share; the rotation's share stays
+  s.orders.push({ id: s.seq++, status: 'pending', quantId: 'mr', symbol: 'XLK', side: 'sell', qty: owners.mr, sector: 'Tech', assetClass: 'etf' });
+  assert.equal(D.approve(s, s.orders.at(-1).id).ok, true);
+  assert.equal(D.ownedQty(s, 'XLK', 'mr'), 0);
+  assert.ok(Math.abs(D.ownedQty(s, 'XLK', 'mom') - owners.mom) < 1e-6);
+  assert.equal(s.orders.at(-1).attribution, 'mr');
 });

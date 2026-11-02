@@ -43,7 +43,7 @@ export function renderPortfolio(s) {
       <td class="r num ${D.positionCap(s, r.p) != null && r.w > D.positionCap(s, r.p) + 1e-9 ? 'down' : ''}">${p1(r.w)}</td>
       <td class="r num ${cls(r.price / r.prev - 1)}">${D.pct(r.price / r.prev - 1, 1)}</td>
       <td class="r num ${cls(r.u)}">${signed(r.u, v => D.usd(v))}<div class="qdesc">${D.pct(r.u / r.p.costBasis, 1)}</div></td>
-      <td><span class="num">${r.p.opened}</span><div class="qdesc">${D.quantName(r.p.openedBy || 'manager')}</div></td>
+      <td><span class="num">${r.p.opened}</span><div class="qdesc">${Object.keys(D.ownersOf(r.p)).map(D.quantName).join(', ')}</div></td>
       <td class="r"><button class="btn rowbtn" data-act="closepos" data-sym="${r.sym}" ${D.marketOpen(s) && !s.kill.halted ? '' : 'disabled'}>Close</button></td></tr>`).join('')}</tbody></table></div>`
     : '<div class="empty">No positions yet. Approve proposals on the Floor, or place a trade from the Blotter.</div>';
 

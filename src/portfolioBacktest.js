@@ -5,9 +5,12 @@
 // Rules that keep it honest:
 // - Signals use closes up to day t; trades execute at day t+1's close (no same-day peeking).
 // - Every rebalance pays costBps on the value traded (spread and slippage; commissions are 0).
+//   costBps can be a number or a function of the symbol (cash-like SHY trades for ~1 bp).
 // - A fund only becomes eligible once it has a full year of history at that date.
 
 import { sma } from './quants/indicators.js';
+import { mrSignals, RULES as MR_RULES } from './quants/meanReversion.js';
+import { cryptoSignals, COINS } from './quants/cryptoTrend.js';
 
 const YEAR = 252, MONTH = 21;
 
@@ -17,7 +20,17 @@ function series(hist, sym, t) {
   return out;
 }
 
-// ---- strategies: (hist, t) -> { SYM: weight } summing to 1 (cash = cashSymbol)
+// The last n known closes up to day t (fast path for strategies checked every day).
+function tail(hist, sym, t, n) {
+  const arr = hist.closes[sym];
+  if (!arr) return [];
+  const out = [];
+  for (let i = t; i >= 0 && out.length < n; i--) if (arr[i] != null) out.push(arr[i]);
+  return out.reverse();
+}
+
+// ---- strategies: (hist, t, { weights }) -> { SYM: weight } summing to 1, or null for "no trade
+// today". `weights` are the current holdings as fractions of the portfolio at day t's close.
 
 export const buyAndHold = sym => () => ({ [sym]: 1 });
 
@@ -51,6 +64,43 @@ export function momentumRotation(universe, { topN = 3, cash = 'SHY', trendFilter
   };
 }
 
+// Mean reversion (src/quants/meanReversion.js), checked daily. Each position is 1/maxPositions
+// of the portfolio; open slots sit in cash. Held positions keep their current weight (no
+// rebalancing between entries and exits).
+export function meanReversion(universe, { cash = 'SHY', rules = MR_RULES } = {}) {
+  const entered = {};                                 // symbol -> day index of entry
+  return (hist, t, { weights }) => {
+    const known = {};
+    for (const s of universe) { if (hist.closes[s]?.[t] == null) continue; const c = tail(hist, s, t, rules.trendDays + 120); if (c.length) known[s] = c; }
+    const held = Object.fromEntries(Object.keys(entered).map(s => [s, t - entered[s]]));
+    const { exits, entries } = mrSignals(known, universe, held, rules);
+    if (!exits.length && !entries.length) return null;
+    for (const e of exits) delete entered[e.symbol];
+    for (const e of entries) entered[e.symbol] = t + 1;  // filled at the next close
+    const w = {};
+    for (const s of Object.keys(entered)) w[s] = entries.some(e => e.symbol === s) ? 1 / rules.maxPositions : (weights[s] || 0);
+    const used = Object.values(w).reduce((a, b) => a + b, 0);
+    if (used < 1 - 1e-9) w[cash] = 1 - used;
+    return w;
+  };
+}
+
+// Crypto trend (src/quants/cryptoTrend.js): equal shares of the coins above their 200-day
+// average, the rest in cash, checked every 5 trading days.
+export function cryptoTrend({ coins = COINS, cash = 'SHY' } = {}) {
+  return (hist, t) => {
+    const known = {};
+    for (const s of coins) { const c = tail(hist, s, t, 260); if (c.length && hist.closes[s][t] != null) known[s] = c; }
+    const live = coins.filter(s => known[s]?.length > 200);
+    if (!live.length) return { [cash]: 1 };
+    const { want } = cryptoSignals(known, live);
+    const w = Object.fromEntries(want.map(s => [s, 1 / live.length]));
+    const used = want.length / live.length;
+    if (used < 1 - 1e-9) w[cash] = 1 - used;
+    return w;
+  };
+}
+
 // ---- simulation
 
 export function simulate(hist, strategy, { from, to, costBps = 10, every = MONTH, capital = 10000 } = {}) {
@@ -60,7 +110,9 @@ export function simulate(hist, strategy, { from, to, costBps = 10, every = MONTH
   const holdings = {};          // symbol -> units
   let cashBal = capital, costs = 0, turnover = 0, rebalances = 0, pending = null;
   const equity = [];
-  const price = (s, t) => hist.closes[s][t];
+  // A missing close (a coin with no print on a US trading day) carries the last known price.
+  const lastSeen = {};
+  const price = (s, t) => { const v = hist.closes[s]?.[t]; if (v != null) lastSeen[s] = v; return v ?? lastSeen[s] ?? null; };
   const value = t => cashBal + Object.entries(holdings).reduce((a, [s, u]) => a + u * (price(s, t) ?? 0), 0);
 
   for (let t = start; t <= end; t++) {
@@ -69,9 +121,12 @@ export function simulate(hist, strategy, { from, to, costBps = 10, every = MONTH
       const target = {};
       for (const [s, w] of Object.entries(pending)) if (price(s, t) != null) target[s] = w * v;
       const current = Object.fromEntries(Object.entries(holdings).map(([s, u]) => [s, u * price(s, t)]));
-      let traded = 0;
-      for (const s of new Set([...Object.keys(target), ...Object.keys(current)])) traded += Math.abs((target[s] || 0) - (current[s] || 0));
-      const cost = traded * costBps / 1e4;
+      let traded = 0, cost = 0;
+      for (const s of new Set([...Object.keys(target), ...Object.keys(current)])) {
+        const d = Math.abs((target[s] || 0) - (current[s] || 0));
+        traded += d;
+        cost += d * (typeof costBps === 'function' ? costBps(s) : costBps) / 1e4;
+      }
       costs += cost; turnover += traded / v; rebalances++;
       for (const s of Object.keys(holdings)) delete holdings[s];
       const invested = Object.values(target).reduce((a, b) => a + b, 0);
@@ -80,7 +135,11 @@ export function simulate(hist, strategy, { from, to, costBps = 10, every = MONTH
       cashBal = (v - invested) * scale;
       pending = null;
     }
-    if ((t - start) % every === 0 && t < end) pending = strategy(hist, t);
+    if ((t - start) % every === 0 && t < end) {
+      const v = value(t);
+      const weights = Object.fromEntries(Object.entries(holdings).map(([s, u]) => [s, u * price(s, t) / v]));
+      pending = strategy(hist, t, { weights });
+    }
     equity.push({ date: hist.dates[t], value: value(t) });
   }
   return { equity, costs, turnoverPerYear: turnover / (equity.length / YEAR), rebalances };
