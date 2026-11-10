@@ -40,3 +40,13 @@ test('fewer than 3 qualifiers: the empty slot stays in cash', () => {
   assert.deepEqual(picks, ['A']);
   assert.equal(proposals.length, 1);
 });
+
+test('orders are sized at actual prices, not the total-return series', () => {
+  const tr = { A: line(100, 200), B: line(100, 160), C: line(100, 130) };   // index levels
+  const prices = { A: 50, B: 40, C: 25 };                                   // actual quotes
+  const { proposals } = runRotation(snap(), tr, { universe: ['A', 'B', 'C'], prices });
+  for (const p of proposals) {
+    assert.equal(p.price, prices[p.symbol]);
+    assert.ok(Math.abs(p.qty * p.price - 10000 * 0.95 / 3) < 1);
+  }
+});

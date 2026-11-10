@@ -26,7 +26,7 @@ function portfolioPanel(s) {
   const since = t.equity / s.fund.capital - 1;
   let unreal = 0;
   const rows = Object.entries(s.account.positions).map(([sym, p]) => {
-    const price = s.sim.prices[sym], prev = s.sim.history[sym].at(-1);
+    const price = s.sim.prices[sym], prev = s.sim.prevClose?.[sym] ?? s.sim.history[sym].at(-1);
     const value = p.qty * price, u = value - p.costBasis; unreal += u;
     const w = value / t.equity;
     const chips = (p.assetClass === 'crypto' ? '<span class="chip crypto">crypto</span>' : '') +

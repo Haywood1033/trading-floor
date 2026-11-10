@@ -25,15 +25,16 @@ export function rankUniverse(bars, universe) {
   return out.sort((a, b) => (b.score ?? -Infinity) - (a.score ?? -Infinity));
 }
 
-// held: { SYM: qty } positions this quant owns. prices: current prices.
-export function runRotation(snapshot, bars, { universe, held = {}, topN = 3, cashBuffer = 0.05, minOrderValue = 0, metaFor = () => ({}) } = {}) {
+// held: { SYM: qty } positions this quant owns. bars: series for the signal (total return).
+// prices: actual prices to size orders with (the last bar is used if a price is missing).
+export function runRotation(snapshot, bars, { universe, held = {}, topN = 3, cashBuffer = 0.05, minOrderValue = 0, metaFor = () => ({}), prices = {} } = {}) {
   const equity = summarize(snapshot).equity;
   const ranked = rankUniverse(bars, universe);
   const picks = ranked.slice(0, topN).filter(r => r.ok).map(r => r.symbol);
   const target = equity * (1 - cashBuffer) / topN;
   const proposals = [];
   const rankOf = sym => ranked.findIndex(r => r.symbol === sym) + 1;
-  const price = sym => snapshot.positions[sym]?.price ?? last(bars[sym]);
+  const price = sym => prices[sym] ?? snapshot.positions[sym]?.price ?? last(bars[sym]);
 
   for (const [sym, qty] of Object.entries(held)) {
     if (picks.includes(sym) || !(qty > 0)) continue;

@@ -321,7 +321,7 @@ export function openDay(state) {
       if (!replayFund) return runMomentum(snap, bars, { universe: DEFAULT_UNIVERSE, fractional: true, minOrderValue: state.settings.limits.minOrderValue || 0 }).proposals;
       if (state.daysRun < state.nextRebalance) return null;                     // not a rebalance day
       state.nextRebalance = state.daysRun + REBALANCE_DAYS;
-      return runRotation(snap, bars, { universe: universe(state), held: owned('mom'), cashBuffer: 1 - (state.settings.sleeves?.mom ?? 0.94), minOrderValue: minOrder, metaFor }).proposals;
+      return runRotation(snap, bars, { universe: universe(state), held: owned('mom'), cashBuffer: 1 - (state.settings.sleeves?.mom ?? 0.94), minOrderValue: minOrder, metaFor, prices: state.sim.prices }).proposals;
     },
     mr: () => {
       if (!replayFund) return null;
@@ -581,9 +581,26 @@ export function closeDay(state) {
     (expired.length ? ` ${expired.length} unapproved order${expired.length > 1 ? 's' : ''} expired.` : ''));
   state.daysRun = (state.daysRun || 0) + 1;
   openNextDay(state.sim);
+  if (!state.sim.ended) payDividends(state);
   gradeDue(state);
   if (state.sim.ended) { log(state, 'system', `Replay reached the latest data (${state.sim.day}). The market stays closed until the history updates.`); return; }
   openDay(state);
+}
+
+// Cash dividends to whoever held the fund at yesterday's close (replay funds only).
+export function payDividends(state) {
+  if (!isReplay(state)) return 0;
+  let total = 0;
+  for (const [sym, perShare] of Object.entries(replay.dividendsToday(state.sim))) {
+    const p = state.account.positions[sym];
+    if (!p) continue;
+    const cash = p.qty * perShare;
+    state.account.cash += cash;
+    state.account.dividends = (state.account.dividends || 0) + cash;
+    total += cash;
+    log(state, 'fill', `Dividend: ${sym} paid ${usd(perShare, 4)} a share on ${fmtQty({ symbol: sym, qty: p.qty })} (${usd(cash, 2)} cash).`);
+  }
+  return total;
 }
 
 // Runs up to n whole trading days, but stops at the first market open where new proposals are

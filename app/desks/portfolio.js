@@ -10,7 +10,7 @@ export function renderPortfolio(s) {
   const spyRet = spyNow / s.fund.spyStart - 1;
   let unreal = 0;
   const rows = Object.entries(s.account.positions).map(([sym, p]) => {
-    const price = s.sim.prices[sym], prev = s.sim.history[sym].at(-1);
+    const price = s.sim.prices[sym], prev = s.sim.prevClose?.[sym] ?? s.sim.history[sym].at(-1);
     const value = p.qty * price, u = value - p.costBasis; unreal += u;
     return { sym, p, price, prev, value, u, w: value / t.equity, avg: p.costBasis / p.qty };
   }).sort((a, b) => b.value - a.value);

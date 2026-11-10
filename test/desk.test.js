@@ -343,3 +343,19 @@ test('two quants can own parts of the same fund, and each sells only its own', (
   assert.ok(Math.abs(D.ownedQty(s, 'XLK', 'mom') - owners.mom) < 1e-6);
   assert.equal(s.orders.at(-1).attribution, 'mr');
 });
+
+test('a replay fund is paid dividends in cash on the ex-date', () => {
+  const h = synthHist(600, { SPY: 0.0004, XLK: 0.0011, TLT: 0.0001, SHY: 0.00005 });
+  h.divs = { TLT: { 302: 0.5 } };
+  D.setMarket(h);
+  const s = D.freshReplayState({ startDate: h.dates[300], capital: 1000 });
+  D.openDay(s);
+  s.orders.push({ id: s.seq++, status: 'pending', quantId: 'manager', symbol: 'TLT', side: 'buy', qty: 1, sector: 'Bonds', assetClass: 'etf' });
+  assert.equal(D.approve(s, s.orders.at(-1).id).ok, true);
+  const cash = s.account.cash;
+  D.skipToClose(s);                                    // day 300 -> 301
+  assert.equal(s.account.cash, cash, 'no dividend yet');
+  D.skipToClose(s);                                    // day 301 -> 302: TLT goes ex
+  assert.ok(Math.abs(s.account.cash - cash - 0.5) < 1e-9);
+  assert.ok(s.log.some(e => /Dividend: TLT/.test(e.text)));
+});
