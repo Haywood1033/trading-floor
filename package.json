@@ -8,10 +8,6 @@
     "node": ">=20"
   },
   "scripts": {
-    "test": "node --test test/*.test.js",
-    "sync": "NODE_USE_ENV_PROXY=1 node scripts/sync.js",
-    "review": "NODE_USE_ENV_PROXY=1 node scripts/review.js",
-    "quants": "NODE_USE_ENV_PROXY=1 node scripts/quants.js",
-    "grade": "NODE_USE_ENV_PROXY=1 node scripts/grade.js"
+    "test": "node --test test/*.test.js"
   }
 }
