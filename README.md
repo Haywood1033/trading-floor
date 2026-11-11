@@ -13,6 +13,20 @@ Built in three phases:
 
 ## The app (`app/`, served at the site root on Vercel)
 
+How a day works (the same timing as the backtest): at each real close, the quants look at closes
+up to that day and propose orders. You approve them (or auto mode does, within its rules), and
+approved orders fill at the **next** close, after the risk manager checks them again at that
+price, paying trading costs (10 bps; 1 bp for SHY). Proposals nobody answers expire at the next
+close, and an unanswered rotation is proposed again then. Play steps one trading day at a time
+and pauses when something needs you; Next day / +1 wk / +1 mo step ahead and stop early at
+proposals. A test (`test/desk.test.js`) runs the rotation through the app and through the
+backtest on the same history and checks they agree.
+
+Buttons act on a completed click or tap (scrolling a phone screen never approves anything), and
+only the panels that changed are redrawn. A fund is never replaced silently: starting a new fund,
+restoring one, a conflicting copy from another device, or a save this version can't open is kept
+under Backups on the Security desk (the last 3, in this browser).
+
 Desks:
 - **Floor**: fund, approval queue, risk gauges, quant bench, activity log
 - **Portfolio**: fund vs SPY, allocation, every position with cost, P&L and owner, close a position
@@ -23,10 +37,9 @@ Desks:
 - **Reports**: the fair backtests, daily brief, fund vs SPY, performance by source, monthly summary
 
 Code:
-- `app/main.js`: controller (loading/saving, clock, routing, actions)
+- `app/main.js`: controller (loading/saving, backups, daily clock, routing, actions)
 - `app/desk.js`: the fund and every action on it; every fill goes through the risk manager
-- `app/replay.js`: real-history replay of `state/history`
-- `app/sim.js`, `src/data/sample.js`: synthetic market used when history can't load, and in tests
+- `app/replay.js`: real-history replay of `state/history`, one close at a time
 - `app/floor.js`, `app/desks/*.js`, `app/ui.js`: screens
 - `app/sync.js`, `api/*.js`, `server/*.js`: optional server sync (below)
 
@@ -34,7 +47,7 @@ Code:
 
 | Quant | Rules | Default |
 |---|---|---|
-| Momentum rotation (`src/quants/rotation.js`) | Top 3 of 20 ETFs by 12-1 month return, above their 200-day average; rebalanced every 21 trading days | Live, 60% sleeve |
+| Momentum rotation (`src/quants/rotation.js`) | Top 3 of 20 ETFs by 12-1 month return, above their 200-day average; rebalanced every 21 trading days; picks more than 10% off their share are topped up or trimmed | Live, 60% sleeve |
 | Mean reversion (`src/quants/meanReversion.js`) | Buy a fund above its 200-day average when RSI(2) < 10; sell above its 5-day average or after 10 days; up to 3 | Paper, 20% sleeve (no edge after costs in the backtest) |
 | Crypto trend (`src/quants/cryptoTrend.js`) | Hold BTC and ETH only above their 200-day average; checked weekly | Live, 15% sleeve |
 | Portfolio reviewer (`src/quants/portfolioReviewer.js`) | Scores the manager's own positions 0–6 for staleness; proposes sells and trims | Live |
@@ -48,9 +61,16 @@ rate and need 20+ graded calls; only proven tiers may auto-trade unless the mana
 
 ## Risk manager (`src/risk/`)
 
-Plain deterministic code, run on every order: kill switch, order size, position caps (stock and
-ETF), crypto and sector caps, cash floor, daily loss and drawdown limits, day trades. Limits are
-edited on the Risk desk.
+Plain deterministic code, run on every order when it is approved and again when it fills: kill
+switch, order size, position caps (stock and ETF), crypto and sector caps, cash floor, daily loss
+limit, drawdown breaker, day trades. Limits are edited on the Risk desk.
+
+- Order size caps are a share of current NAV (40% for any buy, 10% for auto-approval), so they
+  grow and shrink with the fund. Sells are never capped by size: a position can always be closed.
+- The drawdown breaker trips when NAV falls 15% below its peak. Buys pause for 21 trading days,
+  then it re-arms measuring from that day's NAV (or the manager re-arms it sooner). A plain
+  "no buys below the drawdown limit" rule would lock a fund in cash for good after a crash.
+- Daily loss limit: new buys stop once the day is down 2%.
 
 ## Price history and the fair backtest (GitHub Actions, no accounts or keys)
 
@@ -77,10 +97,13 @@ two halves, plus the whole desk in sleeves with and without crypto.
    syncs with no login, open to anyone with the address.
 
 Redeploy after changing either. Without storage the API answers 503 and the fund stays in the
-browser. The fund is stored compressed with a revision number (stale saves are refused), and a
-clock lease lets only one device run the market at a time.
+browser. The fund is stored compressed with a revision number (stale saves are refused, and the
+replaced copy is kept as a backup), and a clock lease lets only one device play at a time.
 
 ## Tests
 
-`npm test` (Node 20+, no dependencies). `.github/workflows/test.yml` runs them on every pull
-request and push to main.
+- `npm test`: unit tests (Node 20+, no dependencies).
+- `npm run e2e`: browser tests that drive the real app in headless Chromium against the committed
+  price history (needs `npm install --no-save playwright` and `npx playwright install chromium`).
+
+`.github/workflows/test.yml` runs both on every pull request and push to main.

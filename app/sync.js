@@ -56,8 +56,10 @@ export function createSync({ validate }) {
     if (r.status !== 200) { s.mode = 'error'; s.lastError = r.data?.detail || r.data?.error || `HTTP ${r.status}`; return {}; }
     Object.assign(s, { mode: 'synced', rev: r.data.rev, owner: r.data.owner, leaseUntil: r.data.leaseUntil, open: !!r.data.open });
     if (!r.data.state) return { seed: true };
-    const state = await unpack(r.data.state);
-    return validate(state) ? { state } : { seed: true };
+    let state = null;
+    try { state = await unpack(r.data.state); } catch { /* unreadable: handed back raw below */ }
+    // A copy this version can't open is handed back (to keep as a backup), never silently replaced.
+    return state && validate(state) ? { state } : { seed: true, foreign: state ?? r.data.state };
   }
 
   async function login(password) {

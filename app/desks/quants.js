@@ -2,7 +2,6 @@
 
 import * as D from '../desk.js';
 import { reviewPortfolio } from '../../src/quants/portfolioReviewer.js';
-import { runMomentum, DEFAULT_UNIVERSE } from '../../src/quants/momentum.js';
 import { esc, cls, p1, panel, seg, tierChip } from '../ui.js';
 import { metaFor } from '../../src/data/universe.js';
 import { mrSignals, RULES as MR } from '../../src/quants/meanReversion.js';
@@ -15,12 +14,6 @@ const RULES = {
     'Trails the benchmark by >10% over 6 months: 2 points; by 5–10%: 1. Down over 6 months: 1. Below 200-day average: 1. 50-day under 200-day: 1. More than 20% off 52-week high: 1.',
     '5+ proposes selling the whole position; 3–4 is a watch. Any stock over the position limit gets a trim proposal.',
     'Backtest note: on today\'s large caps (2017–2026) its sells were right 44% of the time. Survivorship bias works against it there, so the result is inconclusive.'
-  ],
-  mom: [
-    'Ranks a 19-name universe on 12-month return skipping the latest month ("12-1").',
-    'A name must be above its 200-day average and up at least 10%.',
-    'Proposes buying the top 5, each sized to about 5% of NAV; tops up positions below that. Exits are left to the reviewer.',
-    'Backtest note: on today\'s large caps (2017–2026) its buys beat SPY 60% of the time, about 1.9 points per 3 months better than buying all 19. Survivorship bias flatters this.'
   ]
 };
 const REPLAY_RULES = bt => {
@@ -29,8 +22,8 @@ const REPLAY_RULES = bt => {
   const pct = v => (v * 100).toFixed(1) + '%';
   return [
     'Ranks the 20 ETFs (US sectors, small caps, international, emerging, bonds, gold, real estate, commodities) on 12-month return skipping the latest month.',
-    'Every 21 trading days: holds the top 3 that are above their 200-day average with a positive score, each a third of its sleeve; sells any fund that drops out. Empty slots stay in cash.',
-    'This is exactly the strategy in the fair backtest on the Reports desk.',
+    'Every 21 trading days, at the close: holds the top 3 that are above their 200-day average with a positive score, each a third of its sleeve; sells any fund that drops out and trims a pick that has grown more than 10% past its share. Empty slots stay in cash. Orders fill at the next close.',
+    'This is the strategy in the fair backtest on the Reports desk, with the same timing and trading costs; a test checks the app and the backtest agree on it.',
     m && spy ? `Backtest ${bt.start.slice(0, 4)}–now, after costs: ${pct(m.cagr)} a year vs SPY ${pct(spy.cagr)}; worst drop ${pct(m.maxDrawdown)} vs SPY ${pct(spy.maxDrawdown)}. It has not beaten SPY on return; its case is smaller crashes.` : 'Backtest results load from state/backtest-etf.json.'
   ];
 };
@@ -68,11 +61,10 @@ const heldBy = (s, id) => {
 function todayView(s, q) {
   const snap = D.snapshot(s);
   if (q.id === 'mr') {
-    if (!D.isReplay(s)) return '<div class="empty">Runs on real-history funds only.</div>';
     const held = heldBy(s, 'mr');
     const { scan, exits } = mrSignals(s.sim.history, D.universe(s), held);
     const live = s.settings.quantModes.mr === 'live';
-    return `<div class="pad muted" style="font-size:13px">${Object.keys(held).length ? `${live ? 'Holding' : 'Paper book'}: <b>${Object.entries(held).map(([x, d]) => `${x} (${d}d${exits.some(e => e.symbol === x) ? ', exits next open' : ''})`).join(', ')}</b>.` : `${live ? 'Holding' : 'Paper book'}: nothing.`} Checks every open.</div>
+    return `<div class="pad muted" style="font-size:13px">${Object.keys(held).length ? `${live ? 'Holding' : 'Paper book'}: <b>${Object.entries(held).map(([x, d]) => `${x} (${d}d${exits.some(e => e.symbol === x) ? ', exits at the next close' : ''})`).join(', ')}</b>.` : `${live ? 'Holding' : 'Paper book'}: nothing.`} Checks every close.</div>
       <div class="tablewrap"><table><thead><tr><th>Fund</th><th class="r">RSI(2)</th><th>Above 200-day</th><th>Status</th></tr></thead><tbody>
       ${scan.slice(0, 10).map(r => `<tr><td><span class="sym">${r.symbol}</span>${r.symbol in held ? ' <span class="chip crypto">held</span>' : ''}<div class="qdesc">${esc(metaName(r.symbol))}</div></td>
         <td class="r num ${r.rsi < MR.entryRsi ? 'down' : ''}">${r.rsi == null ? '-' : r.rsi.toFixed(1)}</td><td>${r.uptrend ? 'Yes' : 'No'}</td>
@@ -80,33 +72,25 @@ function todayView(s, q) {
       <div class="pad muted" style="font-size:12px">The 10 most oversold funds, lowest RSI first.</div>`;
   }
   if (q.id === 'cry') {
-    if (!D.isReplay(s)) return '<div class="empty">Runs on real-history funds only.</div>';
     const held = heldBy(s, 'cry');
     const { scan } = cryptoSignals(s.sim.history, COINS);
     const due = Math.max(0, (s.nextCrypto ?? 0) - s.daysRun);
-    return `<div class="pad muted" style="font-size:13px">${due ? `Next weekly check in ${due} trading day${due === 1 ? '' : 's'}.` : 'Checks at the next open.'}</div>
+    return `<div class="pad muted" style="font-size:13px">${due ? `Next weekly check in ${due} trading day${due === 1 ? '' : 's'}.` : 'Checks at this close.'}</div>
       <div class="tablewrap"><table><thead><tr><th>Coin</th><th class="r">Price</th><th class="r">200-day avg</th><th>Trend</th></tr></thead><tbody>
       ${scan.map(r => `<tr><td><span class="sym">${r.symbol}</span>${r.symbol in held ? ' <span class="chip crypto">held</span>' : ''}</td>
         <td class="r num">${r.price == null ? '-' : D.usd(r.price)}</td><td class="r num">${r.average == null ? '-' : D.usd(r.average)}</td>
         <td class="${r.above ? 'up' : r.above === false ? 'down' : 'muted'}">${r.above == null ? 'not enough history yet' : r.above ? 'above: hold' : 'below: cash'}</td></tr>`).join('')}</tbody></table></div>`;
   }
-  if (q.id === 'mom' && D.isReplay(s)) {
+  if (q.id === 'mom') {
     const ranked = D.rotationView(s);
     const picks = ranked.slice(0, 3).filter(r => r.ok).map(r => r.symbol);
     const held = Object.entries(s.account.positions).filter(([, p]) => (D.ownersOf(p).mom || 0) > 0).map(([x]) => x);
     const due = D.daysToRebalance(s);
-    return `<div class="pad muted" style="font-size:13px">${due ? `Next rebalance in ${due} trading day${due === 1 ? '' : 's'}.` : 'Rebalances at the next open.'} Picks if it rebalanced now: <b>${picks.join(', ') || 'none (all cash)'}</b>.</div>
+    return `<div class="pad muted" style="font-size:13px">${due ? `Next rebalance in ${due} trading day${due === 1 ? '' : 's'}.` : 'Rebalances at this close.'} Picks if it rebalanced now: <b>${picks.join(', ') || 'none (all cash)'}</b>.</div>
       <div class="tablewrap"><table><thead><tr><th>#</th><th>Fund</th><th class="r">12-1 return</th><th>Above 200-day</th><th>Status</th></tr></thead><tbody>
       ${ranked.map((r, i) => `<tr><td class="num">${r.score == null ? '-' : i + 1}</td><td><span class="sym">${r.symbol}</span>${held.includes(r.symbol) ? ' <span class="chip crypto">held</span>' : ''}<div class="qdesc">${esc(metaName(r.symbol))}</div></td>
         <td class="r num ${cls(r.score ?? 0)}">${r.score == null ? '-' : D.pct(r.score, 0)}</td><td>${r.above200 == null ? '-' : r.above200 ? 'Yes' : 'No'}</td>
         <td class="${picks.includes(r.symbol) ? 'up' : 'muted'}">${picks.includes(r.symbol) ? 'pick' : esc(r.why)}</td></tr>`).join('')}</tbody></table></div>`;
-  }
-  if (q.id === 'mom') {
-    const { ranked } = runMomentum(snap, s.sim.history, { universe: DEFAULT_UNIVERSE });
-    return `<div class="tablewrap"><table><thead><tr><th>#</th><th>Name</th><th class="r">12-1 return</th><th>Above 200-day</th><th>Status</th></tr></thead><tbody>
-      ${ranked.map((r, i) => `<tr><td class="num">${r.score == null ? '-' : i + 1}</td><td class="sym">${r.symbol}</td>
-        <td class="r num ${cls(r.score ?? 0)}">${r.score == null ? '-' : D.pct(r.score, 0)}</td><td>${r.above200 == null ? '-' : r.above200 ? 'Yes' : 'No'}</td>
-        <td class="${r.eligible ? 'up' : 'muted'}">${esc(r.why)}</td></tr>`).join('')}</tbody></table></div>`;
   }
   const { reviews } = reviewPortfolio(snap, s.sim.history);
   if (!reviews.length) return '<div class="empty">The fund holds nothing yet, so there is nothing to review.</div>';
@@ -131,19 +115,14 @@ export function renderQuants(s, ui) {
   const cards = board.map(q => {
     const cap = s.settings.quantAlloc[q.id];
     const used = D.quantExposure(s, q.id);
-    const id = 'alloc-' + q.id;
     const sleeveId = 'sleeve-' + q.id;
     const sv = s.settings.sleeves?.[q.id];
-    const capField = q.id === 'rev' ? `<span class="muted">${D.isReplay(s) ? 'Reviews only the positions you opened yourself; sells only.' : 'Sells only; no capital cap.'}</span>`
-      : D.isReplay(s) ? `<div class="field" style="grid-template-columns:minmax(0,1fr) 110px auto"><label for="${sleeveId}">Sleeve (% of the fund)</label>
+    const capField = q.id === 'rev' ? `<span class="muted">Reviews only the positions you opened yourself; sells only.</span>`
+      : `<div class="field" style="grid-template-columns:minmax(0,1fr) 110px auto"><label for="${sleeveId}">Sleeve (% of the fund)</label>
           <input id="${sleeveId}" data-draft inputmode="decimal" value="${esc(ui.drafts[sleeveId] ?? String(+((sv ?? 0) * 100).toFixed(1)))}">
           <button class="btn" data-act="saveSleeve" data-q="${q.id}">Save</button>
-          <span class="hint">Sizes its trades from this share of the fund. Using ${D.usd(used)} (${p1(used / eq)}); buys beyond ${p1(cap ?? 0)} are blocked. All sleeves together: ${p1(D.sleeveTotal(s))}.</span></div>`
-      : `<div class="field" style="grid-template-columns:minmax(0,1fr) 110px auto"><label for="${id}">Capital cap (% of NAV)</label>
-          <input id="${id}" data-draft inputmode="decimal" placeholder="no cap" value="${esc(ui.drafts[id] ?? (cap == null ? '' : String(+(cap * 100).toFixed(1))))}">
-          <button class="btn" data-act="saveAlloc" data-q="${q.id}">Save</button>
-          <span class="hint">Using ${D.usd(used)} (${p1(used / eq)} of NAV). Buys that would take it over the cap are blocked.</span></div>`;
-    return `${panel(q.id === 'mom' && D.isReplay(s) ? 'Momentum rotation' : q.name, '', `<div class="pad" style="display:grid;gap:12px">
+          <span class="hint">Sizes its trades from this share of the fund. Using ${D.usd(used)} (${p1(used / eq)}); buys beyond ${p1(cap ?? 0)} are blocked. All sleeves together: ${p1(D.sleeveTotal(s))}.</span></div>`;
+    return `${panel(q.name, '', `<div class="pad" style="display:grid;gap:12px">
         <div class="tiles">
           <div class="tile"><span class="label">Tier</span><span>${tierChip(q.tier)}</span><span class="sub">20 graded calls needed to rate</span></div>
           <div class="tile"><span class="label">Graded</span><span class="value">${q.graded}</span><span class="sub">${q.open} open</span></div>
@@ -154,9 +133,9 @@ export function renderQuants(s, ui) {
           <span class="muted" style="font-size:12px">Live: proposals go to your queue. Paper: calls are recorded and graded but never queued. Off: not run.</span></div>
         ${capField}
       </div>
-      <ul class="rules">${(q.id === 'mom' && D.isReplay(s) ? REPLAY_RULES(ui.backtest) : q.id === 'mr' ? MR_RULES(ui.backtest) : q.id === 'cry' ? CRY_RULES(ui.backtest) : RULES[q.id]).map(r => `<li>${esc(r)}</li>`).join('')}</ul>`)}
+      <ul class="rules">${(q.id === 'mom' ? REPLAY_RULES(ui.backtest) : q.id === 'mr' ? MR_RULES(ui.backtest) : q.id === 'cry' ? CRY_RULES(ui.backtest) : RULES[q.id]).map(r => `<li>${esc(r)}</li>`).join('')}</ul>`)}
       <div class="cols-2">
-        ${panel({ mom: D.isReplay(s) ? 'Rotation ranking' : "Today's ranking", mr: 'Dip scan', cry: 'Trend check' }[q.id] || "Today's review", 'from the latest closes', todayView(s, q))}
+        ${panel({ mom: 'Rotation ranking', mr: 'Dip scan', cry: 'Trend check' }[q.id] || "Today's review", 'from the latest closes', todayView(s, q))}
         ${panel('Call history', `graded ${D.HORIZON[q.id] ?? 63} trading days after each call`, history(s, q))}
       </div>`;
   }).join('');

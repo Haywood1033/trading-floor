@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { evaluateOrder, canAutoExecute, maxQtyWithinLimits } from '../src/risk/riskManager.js';
+import { evaluateOrder, canAutoExecute, maxQtyWithinLimits, orderCap } from '../src/risk/riskManager.js';
 import { summarize } from '../src/core/portfolio.js';
 import { samplePortfolio, buy, sell } from './fixtures.js';
 
@@ -79,9 +79,30 @@ test('malformed orders are rejected', () => {
   }
 });
 
-test('order value cap applies even to sells', () => {
-  const r = evaluateOrder(sell('INTC', 95, 22.10), samplePortfolio(), { limits: { maxOrderValue: 1000 } });
-  assert.deepEqual(failed(r), ['maxOrderValue']);
+test('the order size cap applies to buys only: a position can always be sold', () => {
+  const snap = samplePortfolio();
+  assert.equal(evaluateOrder(sell('INTC', 95, 22.10), snap, { limits: { maxOrderValue: 1000 } }).approved, true);
+  assert.deepEqual(failed(evaluateOrder(buy('INTC', 95, 22.10), snap, { limits: { maxOrderValue: 1000, maxPositionPct: 1 } })), ['maxOrderValue']);
+});
+
+test('the order size cap is a share of the fund unless a dollar cap is set', () => {
+  const snap = samplePortfolio(), eq = summarize(snap).equity;
+  assert.equal(orderCap({ maxOrderPct: 0.1 }, snap), 0.1 * eq);
+  assert.equal(orderCap({ maxOrderPct: 0.1, maxOrderValue: 500 }, snap), 500);
+  const half = { ...snap, cash: snap.cash - eq / 2 };          // a smaller fund gets a smaller cap
+  assert.ok(orderCap({ maxOrderPct: 0.1 }, half) < 0.1 * eq);
+  const o = buy('NVDA', 10, 138.40);
+  assert.equal(evaluateOrder(o, snap, { limits: { maxOrderPct: 0.10 } }).approved, true);
+  assert.deepEqual(failed(evaluateOrder(o, snap, { limits: { maxOrderPct: 0.05 } })), ['maxOrderValue']);
+});
+
+test('a tripped drawdown breaker blocks buys, not sells', () => {
+  const snap = samplePortfolio(), breaker = { untilDate: '2024-03-01' };
+  const r = evaluateOrder(buy('NVDA', 1, 138.40), snap, { breaker });
+  assert.deepEqual(failed(r), ['drawdown']);
+  assert.match(r.checks.find(c => c.id === 'drawdown').message, /2024-03-01/);
+  assert.equal(evaluateOrder(sell('INTC', 10, 22.10), snap, { breaker }).approved, true);
+  assert.equal(evaluateOrder(buy('NVDA', 1, 138.40), snap, { breaker: null, peakEquity: 1e9 }).approved, true);
 });
 
 test('day-trade cap applies under the equity threshold only', () => {
@@ -98,7 +119,7 @@ test('auto mode needs auto on, a cleared tier and a small order', () => {
   assert.equal(canAutoExecute(small, snap, { mode: 'auto', quantTier: 'elite' }).auto, true);
   assert.equal(canAutoExecute(small, snap, { mode: 'approval', quantTier: 'elite' }).auto, false);
   assert.equal(canAutoExecute(small, snap, { mode: 'auto', quantTier: 'unproven' }).auto, false);
-  assert.equal(canAutoExecute(buy('NVDA', 15, 138.40), snap, { mode: 'auto', quantTier: 'elite' }).auto, false);
+  assert.equal(canAutoExecute(buy('NVDA', 20, 138.40), snap, { mode: 'auto', quantTier: 'elite' }).auto, false);
   assert.equal(canAutoExecute(small, snap, { mode: 'auto', quantTier: 'elite', halted: true }).auto, false);
 });
 

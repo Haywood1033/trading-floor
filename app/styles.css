@@ -61,8 +61,15 @@ main { padding: 16px; display: grid; gap: 12px; align-content: start; min-width:
   .nav a[aria-current="page"] { box-shadow: inset 0 -3px 0 var(--accent); }
   body { padding-bottom: 64px; }
   html { scroll-padding-bottom: 76px; }
-  header.bar { position: static; }
+  header.bar { position: static; gap: 6px 10px; padding: 8px 10px; padding-top: calc(8px + env(safe-area-inset-top, 0px)); }
+  .brand { font-size: 17px; }
+  .status { gap: 8px; font-size: 12px; }
+  .controls { width: 100%; display: grid; grid-template-columns: auto auto; gap: 6px; justify-content: space-between; }
+  .controls .seg button { padding: 7px 8px; font-size: 11px; }
+  .kill { padding: 7px 10px; }
+  .wide { display: none; }
 }
+@media (min-width: 761px) { .narrow { display: none; } }
 
 /* Panels and grids */
 .grid-floor { display: grid; gap: 12px; grid-template-columns: 300px minmax(0, 1fr) 290px; align-items: start; }
@@ -211,3 +218,12 @@ td.r, th.r { text-align: right; }
 #loginPw:focus { outline: 2px solid var(--accent); outline-offset: 0; }
 
 tr.hl td { background: color-mix(in srgb, var(--accent) 8%, transparent); }
+
+.controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.subhead { margin: 10px 12px 4px; font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.working, .backups { list-style: none; margin: 0; padding: 0 12px; display: grid; gap: 6px; }
+.working li, .backups li { display: flex; gap: 8px; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--line); font-size: 13px; }
+.backups li > span:first-child { display: grid; flex: 1; }
+.btn.small { padding: 3px 9px; font-size: 11px; }
+.breaker { border-left: 3px solid var(--down); padding-left: 8px; }
+.loaderr { padding: 24px; display: grid; gap: 12px; max-width: 560px; }

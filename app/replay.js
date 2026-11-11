@@ -1,120 +1,84 @@
-// Real-history replay. The market plays real daily closes forward from a start date the
-// manager picks. Within each day, prices move from yesterday's real close to today's real
-// close along a random path (seeded, so every device sees the same path); the close is exact.
+// Real-history replay, one trading day at a time. A fund starts at the close of the date the
+// manager picks; each step moves to the next real trading day's close. Decisions are made at a
+// close, using closes up to that day; approved orders fill at the next close. This is the same
+// timing the backtest uses (src/portfolioBacktest.js).
 //
-// Only the cursor and today's intraday state are saved. The price history itself is loaded
-// from state/history/ and attached to the sim without being saved (non-enumerable), so the
-// saved fund stays small and nothing beyond the current day is visible to the quants.
-
-import { TICKS_PER_DAY } from './sim.js';
+// Only the cursor and the current closes are saved. The price history is loaded from
+// state/history/ and attached to the sim without being saved (non-enumerable), so the saved fund
+// stays small and nothing after the current close is visible to the quants.
 
 const WARMUP = 260; // trading days of history the quants need before the start date
 
-function rng(state) {
-  let t = (state + 0x6D2B79F5) >>> 0;
-  let r = Math.imul(t ^ (t >>> 15), 1 | t);
-  r ^= r + Math.imul(r ^ (r >>> 7), 61 | r);
-  return [((r ^ (r >>> 14)) >>> 0) / 4294967296, t];
-}
-function hash(str) { let h = 2166136261; for (const c of str) h = Math.imul(h ^ c.charCodeAt(0), 16777619); return h >>> 0; }
-
 export function earliestStart(hist) { return hist.dates[WARMUP]; }
 
-// hist: { dates, closes: { SYM: [..] } } from joinHistory
-export function createReplay(hist, { startDate, seed = 7 }) {
+// hist: { dates, closes, divs?, tr? } from joinHistory
+export function createReplay(hist, { startDate }) {
   let cursor = hist.dates.findIndex(d => d >= startDate);
   if (cursor < 0) throw new Error(`No data on or after ${startDate}`);
   cursor = Math.max(cursor, WARMUP);
-  const sim = { mode: 'replay', cursor, day: hist.dates[cursor], tick: 0, seed, ended: false, prices: {}, dayOpen: {} };
+  const sim = { mode: 'replay', cursor, day: hist.dates[cursor], ended: false, prices: {} };
   attach(sim, hist);
-  for (const [s, arr] of Object.entries(hist.closes)) if (arr[cursor - 1] != null) sim.prices[s] = arr[cursor - 1];
-  sim.dayOpen = { ...sim.prices };
   return sim;
 }
 
 // Rebuilds the unsaved views the rest of the app reads. Call after loading a saved fund and
-// after each day.
-//   history    total-return series up to yesterday, per symbol, without gaps (what quants read)
-//   prevClose  yesterday's actual close per symbol (for day moves on screen)
-//   dates      trading dates up to yesterday
+// after each step.
+//   prices     closes on the current day (carried from the last close for a symbol with none)
+//   history    total-return series up to and including the current day, per symbol, no gaps
+//   prevClose  the actual close before the current day, per symbol (for day moves on screen)
+//   dates      trading dates up to and including the current day
 export function attach(sim, hist) {
-  const history = {}, prevClose = {};
+  const history = {}, prevClose = {}, prices = {};
   const sig = hist.tr || hist.closes;
   for (const [s, arr] of Object.entries(sig)) {
     const h = [];
-    for (let i = 0; i < sim.cursor; i++) if (arr[i] != null) h.push(arr[i]);
+    for (let i = 0; i <= sim.cursor; i++) if (arr[i] != null) h.push(arr[i]);
     if (h.length) history[s] = h;
-    for (let i = sim.cursor - 1; i >= 0; i--) if (hist.closes[s][i] != null) { prevClose[s] = hist.closes[s][i]; break; }
+    const raw = hist.closes[s];
+    let found = 0;
+    for (let i = sim.cursor; i >= 0 && found < 2; i--) {
+      if (raw[i] == null) continue;
+      if (found === 0) prices[s] = raw[i]; else prevClose[s] = raw[i];
+      found++;
+    }
   }
-  Object.defineProperty(sim, 'prevClose', { value: prevClose, enumerable: false, configurable: true, writable: true });
+  sim.prices = prices;
   Object.defineProperty(sim, 'hist', { value: hist, enumerable: false, configurable: true, writable: true });
   Object.defineProperty(sim, 'history', { value: history, enumerable: false, configurable: true, writable: true });
-  Object.defineProperty(sim, 'dates', { value: hist.dates.slice(0, sim.cursor), enumerable: false, configurable: true, writable: true });
-  Object.defineProperty(sim, 'paths', { value: {}, enumerable: false, configurable: true, writable: true });
+  Object.defineProperty(sim, 'prevClose', { value: prevClose, enumerable: false, configurable: true, writable: true });
+  Object.defineProperty(sim, 'dates', { value: hist.dates.slice(0, sim.cursor + 1), enumerable: false, configurable: true, writable: true });
   return sim;
 }
 
-// The intraday path for one symbol today: a Brownian bridge from yesterday's close to today's.
-function path(sim, sym) {
-  const key = `${sym}:${sim.cursor}`;
-  if (sim.paths[key]) return sim.paths[key];
-  const arr = sim.hist.closes[sym];
-  const prev = arr[sim.cursor - 1], close = arr[sim.cursor];
-  if (prev == null || close == null) return (sim.paths[key] = null);
-  let st = hash(key) ^ sim.seed;
-  const T = TICKS_PER_DAY;
-  const dayVol = Math.max(0.004, Math.abs(Math.log(close / prev)) * 0.8 + 0.006);
-  const w = [0];
-  for (let k = 1; k <= T; k++) {
-    let u, v;
-    [u, st] = rng(st); [v, st] = rng(st);
-    const z = Math.sqrt(-2 * Math.log(u || 1e-12)) * Math.cos(2 * Math.PI * v);
-    w.push(w[k - 1] + z * dayVol / Math.sqrt(T));
-  }
-  const lp = Math.log(prev), lc = Math.log(close);
-  const out = w.map((x, k) => Math.exp(lp + (lc - lp) * k / T + x - (k / T) * w[T]));
-  out[T] = close;
-  return (sim.paths[key] = out);
-}
-
-export function step(sim) {
-  if (sim.ended || sim.tick >= TICKS_PER_DAY) return { closed: false };
-  sim.tick++;
-  for (const s of Object.keys(sim.hist.closes)) {
-    const p = path(sim, s);
-    if (p) sim.prices[s] = +p[sim.tick].toPrecision(8);
-  }
-  return { closed: sim.tick === TICKS_PER_DAY };
-}
-
-// After the close: move to the next real trading day, or end when the data runs out.
-export function openNextDay(sim) {
-  if (sim.cursor + 1 >= sim.hist.dates.length) { sim.ended = true; return; }
+// Moves to the next trading day's close. Returns false (and marks the replay ended) when the
+// history has no more days.
+export function advance(sim) {
+  if (sim.ended) return false;
+  if (sim.cursor + 1 >= sim.hist.dates.length) { sim.ended = true; return false; }
   sim.cursor++;
   sim.day = sim.hist.dates[sim.cursor];
-  sim.tick = 0;
   attach(sim, sim.hist);
-  for (const [s, arr] of Object.entries(sim.hist.closes)) if (arr[sim.cursor - 1] != null) sim.prices[s] = arr[sim.cursor - 1];
-  sim.dayOpen = { ...sim.prices };
+  return true;
 }
 
-// Dividends going ex today, per share: { SYM: amount }. Holders at yesterday's close get paid.
+// Dividends going ex on the current day, per share: { SYM: amount }. Whoever held the fund at
+// the previous close gets paid.
 export function dividendsToday(sim) {
   const out = {};
   for (const [s, byIndex] of Object.entries(sim.hist.divs || {})) if (byIndex[sim.cursor]) out[s] = byIndex[sim.cursor];
   return out;
 }
 
-// Prices strictly after `date`, up to the last completed day only (never the future), as total
-// return: each is the actual close on `date` grown by the fund's return since, dividends
-// included. Used to grade calls.
+// Prices strictly after `date`, up to the current day only (never the future), as total return:
+// each is the actual close on `date` grown by the fund's return since, dividends included.
+// Used to grade calls.
 export function closesAfter(sim, symbol, date) {
   const tr = (sim.hist.tr || sim.hist.closes)[symbol] || [];
   const raw = sim.hist.closes[symbol] || [];
   let base = null;
-  for (let i = 0; i < sim.cursor && sim.hist.dates[i] <= date; i++) if (tr[i] != null) base = i;
+  for (let i = 0; i <= sim.cursor && sim.hist.dates[i] <= date; i++) if (tr[i] != null) base = i;
   const out = [];
-  for (let i = 0; i < sim.cursor; i++) {
+  for (let i = 0; i <= sim.cursor; i++) {
     if (sim.hist.dates[i] <= date || tr[i] == null) continue;
     out.push(base == null ? raw[i] : raw[base] * tr[i] / tr[base]);
   }
@@ -123,8 +87,10 @@ export function closesAfter(sim, symbol, date) {
 
 // Loads state/history in the browser.
 export async function loadHistory(base = '/state/history') {
-  const index = await (await fetch(`${base}/index.json`, { cache: 'no-cache' })).json();
-  const files = await Promise.all(index.years.map(y => fetch(`${base}/${y}.json`).then(r => { if (!r.ok) throw new Error(`history ${y}: HTTP ${r.status}`); return r.json(); })));
+  const res = await fetch(`${base}/index.json`, { cache: 'no-cache' });
+  if (!res.ok) throw new Error(`price history index: HTTP ${res.status}`);
+  const index = await res.json();
+  const files = await Promise.all(index.years.map(y => fetch(`${base}/${y}.json`).then(r => { if (!r.ok) throw new Error(`price history ${y}: HTTP ${r.status}`); return r.json(); })));
   const { joinHistory } = await import('../src/data/history.js');
   return { index, hist: joinHistory(files) };
 }

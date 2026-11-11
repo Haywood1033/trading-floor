@@ -19,9 +19,11 @@ export function evaluateOrder(order, snapshot, ctx = {}) {
   add('valid', valid, valid ? 'Order is well formed' : 'Order needs a symbol, side, positive qty and positive price');
   if (!valid) return finish(checks);
 
-  const value = orderValue(order);
-  add('maxOrderValue', value <= limits.maxOrderValue,
-    `Order value $${value.toFixed(0)} / $${limits.maxOrderValue}`);
+  // Size cap: buys only, so a position can always be closed.
+  if (order.side === 'buy') {
+    const value = orderValue(order), cap = orderCap(limits, snapshot);
+    add('maxOrderValue', value <= cap + 1e-9, `Order $${value.toFixed(0)}; max $${cap.toFixed(0)}`);
+  }
 
   if (order.side === 'sell') {
     const held = heldQty(snapshot, order.symbol);
@@ -46,7 +48,10 @@ export function evaluateOrder(order, snapshot, ctx = {}) {
     add('dailyLoss', dayPct > limits.dailyLossLimitPct,
       `Day ${pct(dayPct)}; buys stop at ${pct(limits.dailyLossLimitPct)}`);
 
-    if (limits.maxDrawdownPct != null && ctx.peakEquity > 0) {
+    // The drawdown breaker: once the desk trips it, buys pause until it re-arms. Callers
+    // without a breaker (ctx.breaker undefined) get the plain drawdown test.
+    if (ctx.breaker) add('drawdown', false, `Drawdown breaker tripped; buys paused until ${ctx.breaker.untilDate || 'it re-arms'}`);
+    else if (ctx.breaker === undefined && limits.maxDrawdownPct != null && ctx.peakEquity > 0) {
       const dd = before.equity / ctx.peakEquity - 1;
       add('drawdown', dd > -limits.maxDrawdownPct, `Drawdown ${pct(dd)}; buys stop at -${pct(limits.maxDrawdownPct)}`);
     }
@@ -85,17 +90,31 @@ export function canAutoExecute(order, snapshot, ctx = {}) {
   const reasons = result.checks.filter(c => !c.ok).map(c => c.message);
   if (ctx.mode !== 'auto') reasons.push('Approval mode is on');
   if (!limits.autoTiers.includes(ctx.quantTier)) reasons.push(`Quant tier "${ctx.quantTier || 'none'}" is not cleared for auto`);
-  if (orderValue(order) > limits.autoMaxOrderValue) reasons.push(`Over the $${limits.autoMaxOrderValue} auto cap`);
+  const cap = autoCap(limits, snapshot);
+  if (order.side === 'buy' && orderValue(order) > cap + 1e-9) reasons.push(`Over the $${cap.toFixed(0)} auto cap`);
   return { auto: reasons.length === 0, reasons };
+}
+
+// Dollar caps from the limits: a fixed amount if set, else a share of current NAV.
+export function orderCap(limits, snapshot) {
+  const L = { ...DEFAULT_LIMITS, ...limits };
+  return L.maxOrderValue != null ? L.maxOrderValue : L.maxOrderPct * summarize(snapshot).equity;
+}
+export function autoCap(limits, snapshot) {
+  const L = { ...DEFAULT_LIMITS, ...limits };
+  return L.autoMaxOrderValue != null ? L.autoMaxOrderValue : L.autoMaxOrderPct * summarize(snapshot).equity;
 }
 
 // Largest quantity (in `step` increments, at or below order.qty) that passes every check.
 // Returns 0 if no size fits. Used for the "Resize to fit" button.
 export function maxQtyWithinLimits(order, snapshot, ctx = {}, step = 1) {
-  const units = Math.floor(order.qty / step + 1e-9);
-  for (let n = units; n > 0; n--) {
-    const qty = +(n * step).toFixed(8);
-    if (evaluateOrder({ ...order, qty }, snapshot, ctx).approved) return qty;
-  }
-  return 0;
+  // Every check is either independent of size or gets stricter as size grows, so the sizes
+  // that pass form a range starting at the smallest: binary search for its top.
+  const fits = n => evaluateOrder({ ...order, qty: +(n * step).toFixed(8) }, snapshot, ctx).approved;
+  let lo = 0, hi = Math.floor(order.qty / step + 1e-9);
+  if (hi > 0 && fits(hi)) return +(hi * step).toFixed(8);
+  if (hi < 1 || !fits(1)) return 0;
+  lo = 1;
+  while (hi - lo > 1) { const mid = (lo + hi) >> 1; if (fits(mid)) lo = mid; else hi = mid; }
+  return +(lo * step).toFixed(8);
 }

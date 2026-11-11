@@ -50,3 +50,14 @@ test('orders are sized at actual prices, not the total-return series', () => {
     assert.ok(Math.abs(p.qty * p.price - 10000 * 0.95 / 3) < 1);
   }
 });
+
+test('a pick that has grown past its band is trimmed back to its share', () => {
+  const positions = { A: { qty: 30, price: 200, assetClass: 'etf' } };       // $6000 of a $10000 fund
+  const { proposals } = runRotation(snap(positions, 4000), bars, { universe: U, held: { A: 30 } });
+  const trim = proposals.find(p => p.symbol === 'A');
+  assert.equal(trim.side, 'sell');
+  assert.ok(Math.abs((30 - trim.qty) * 200 - 10000 * 0.95 / 3) < 1);
+  assert.match(trim.thesis, /Rotation trim/);
+  const none = runRotation(snap(positions, 4000), bars, { universe: U, held: { A: 30 }, band: 1 });
+  assert.ok(!none.proposals.some(p => p.symbol === 'A'), 'a wide band leaves it alone');
+});

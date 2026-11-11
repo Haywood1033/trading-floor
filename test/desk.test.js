@@ -1,361 +1,297 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import * as D from '../app/desk.js';
-import { TICKS_PER_DAY } from '../app/sim.js';
+import { synthHist, rotatingMarket } from './helpers.js';
+import { simulate, momentumRotation } from '../src/portfolioBacktest.js';
+import { ROTATION_UNIVERSE } from '../src/data/universe.js';
 
-const fresh = () => D.freshState({ seed: 11, capital: 100000 });
+const SYMS = { SPY: 0.0004, QQQ: 0.0009, XLK: 0.0011, XLE: -0.0004, TLT: 0.0001, GLD: 0.0006, SHY: 0.00005, BTC: 0.002 };
+function fund({ capital = 1000, start = 300, hist } = {}) {
+  const h = hist || synthHist(600, SYMS);
+  D.setMarket(h);
+  const s = D.freshReplayState({ startDate: h.dates[start], capital });
+  D.decide(s);
+  return { h, s };
+}
+const approveAll = s => { for (const o of D.pending(s)) D.approve(s, o.id); };
 
-test('the first open queues momentum buys on a cash-only fund', () => {
-  const s = fresh();
-  D.openDay(s);
-  const p = D.pending(s);
-  assert.ok(p.length >= 3);
-  assert.ok(p.every(o => o.quantId === 'mom' && o.side === 'buy'));
-  assert.equal(s.signals.length, p.length);       // every call recorded for grading
-  D.openDay(s);                                     // idempotent within a day
-  assert.equal(D.pending(s).length, p.length);
+test('a new fund decides at the close of its start date: rotation buys a third of its sleeve each', () => {
+  const { h, s } = fund();
+  assert.equal(s.sim.day, h.dates[300]);
+  const rot = D.pending(s).filter(o => o.quantId === 'mom');
+  assert.ok(rot.length >= 2 && rot.length <= 3);
+  for (const o of rot) assert.ok(Math.abs(o.qty * s.sim.prices[o.symbol] - 200) < 2, 'a third of the 60% sleeve');
+  D.decide(s);                                                   // once per day
+  assert.equal(D.pending(s).filter(o => o.quantId === 'mom').length, rot.length);
 });
 
-test('approving fills at the current price and moves cash into the position', () => {
-  const s = fresh(); D.openDay(s);
-  const o = D.pending(s)[0];
-  const price = s.sim.prices[o.symbol];
+test('approved orders fill at the NEXT close and pay trading costs', () => {
+  const { h, s } = fund();
+  const o = D.pending(s).find(x => x.quantId === 'mom');
   assert.equal(D.approve(s, o.id).ok, true);
+  assert.equal(o.status, 'approved');
+  assert.equal(s.account.cash, 1000, 'nothing moves at approval');
+  D.advance(s);
   assert.equal(o.status, 'filled');
-  assert.ok(Math.abs(s.account.cash - (100000 - o.qty * price)) < 1e-6);
-  assert.equal(s.account.positions[o.symbol].qty, o.qty);
-  assert.ok(Math.abs(D.totals(s).equity - 100000) < 1e-6);
+  const px = h.closes[o.symbol][301];
+  assert.equal(o.fillPrice, px);
+  const fee = o.qty * px * 10 / 1e4;
+  assert.ok(Math.abs(o.fee - fee) < 1e-9);
+  assert.ok(Math.abs(s.account.cash - (1000 - o.qty * px - fee)) < 1e-9);
+  assert.ok(Math.abs(s.account.fees - fee) < 1e-9);
 });
 
-test('risk vetoes stop a fill and leave the order pending', () => {
-  const s = fresh(); D.openDay(s);
-  const o = D.pending(s)[0];
-  D.setQty(s, o.id, Math.ceil(30000 / s.sim.prices[o.symbol])); // ~30% of the fund
-  const r = D.approve(s, o.id);
-  assert.equal(r.ok, false);
-  assert.equal(o.status, 'pending');
+test('risk is checked again at the fill: an order that no longer passes is blocked, not filled', () => {
+  const { s } = fund();
+  const o = D.pending(s).find(x => x.side === 'buy');
+  D.approve(s, o.id);
+  D.updateLimits(s, { maxOrderPct: 0.01 });
+  D.advance(s);
+  assert.equal(o.status, 'blocked');
+  assert.match(o.blockedReason, /Order \$/);
   assert.equal(Object.keys(s.account.positions).length, 0);
-  D.resizeToFit(s, o.id);
-  assert.equal(D.approve(s, o.id).ok, true);
 });
 
-test('kill switch cancels the queue and blocks fills until resumed', () => {
-  const s = fresh(); D.openDay(s);
-  const ids = D.pending(s).map(o => o.id);
+test('order size scales with the fund, and selling is never blocked by size', () => {
+  const { s } = fund({ capital: 10000 });
+  approveAll(s); D.advance(s);
+  const sym = Object.keys(s.account.positions)[0];
+  D.updateLimits(s, { maxOrderPct: 0.01 });
+  assert.equal(D.closePosition(s, sym).ok, true, 'closing a position ignores the size cap');
+  const small = D.previewManual(s, { symbol: 'GLD', side: 'buy', qty: 0.5 });
+  const big = D.previewManual(s, { symbol: 'GLD', side: 'buy', qty: 5 });
+  assert.equal(small.checks.find(c => c.id === 'maxOrderValue').ok, true);
+  assert.equal(big.checks.find(c => c.id === 'maxOrderValue').ok, false);
+  assert.match(big.checks.find(c => c.id === 'maxOrderValue').message, /max \$1\d\d/);  // 1% of ~$10k
+});
+
+test('the drawdown breaker pauses buys, then re-arms instead of locking the fund in cash', () => {
+  const h = synthHist(700, SYMS);
+  for (const s of Object.keys(h.closes)) for (let i = 320; i < 700; i++) {
+    const f = i < 340 ? 0.985 : 1.003;                          // a 26% slide, then a recovery
+    h.closes[s][i] = +(h.closes[s][i - 1] * f).toFixed(4);
+  }
+  const { s } = fund({ hist: h, capital: 10000 });
+  D.setMode(s, 'auto');
+  D.updateLimits(s, { autoTiers: ['elite', 'allstar', 'value', 'unproven'], autoMaxOrderPct: 1 });
+  let tripped = null, rearmed = null;
+  for (let d = 0; d < 120; d++) {
+    D.advance(s);
+    if (s.breaker && !tripped) tripped = s.daysRun;
+    if (tripped && !s.breaker && !rearmed) rearmed = s.daysRun;
+  }
+  assert.ok(tripped, 'tripped during the slide');
+  assert.equal(rearmed - tripped, 21, 'paused 21 trading days, then re-armed');
+  assert.ok(s.log.some(e => /Drawdown breaker tripped/.test(e.text)) && s.log.some(e => /re-armed/.test(e.text)));
+  const lastBuy = s.orders.filter(o => o.status === 'filled' && o.side === 'buy').at(-1);
+  assert.ok(lastBuy.filledAt > h.dates[300 + rearmed], 'buys resumed after it re-armed');
+});
+
+test('the manager can re-arm the breaker by hand', () => {
+  const { s } = fund();
+  s.breaker = { trippedOn: s.sim.day, until: s.daysRun + 21, untilDate: 'later', peak: 2000 };
+  assert.equal(D.previewManual(s, { symbol: 'GLD', side: 'buy', qty: 0.5 }).checks.find(c => c.id === 'drawdown').ok, false);
+  D.rearmBreaker(s);
+  assert.equal(s.breaker, null);
+  assert.equal(D.previewManual(s, { symbol: 'GLD', side: 'buy', qty: 0.5 }).approved, true);
+});
+
+test('an unanswered rebalance is retried at the next close; a rejected one waits a month', () => {
+  const a = fund().s;
+  assert.ok(D.pending(a).some(o => o.quantId === 'mom'));
+  D.advance(a);                                                   // nobody answered
+  assert.ok(D.pending(a).some(o => o.quantId === 'mom'), 'proposed again the next day');
+  const b = fund().s;
+  for (const o of D.pending(b)) if (o.quantId === 'mom') D.reject(b, o.id);
+  D.advance(b);
+  assert.equal(D.pending(b).filter(o => o.quantId === 'mom').length, 0);
+  assert.equal(D.daysToRebalance(b), 20);
+});
+
+test('skipping ahead stops at the first close where proposals are waiting', () => {
+  const { s } = fund({ hist: rotatingMarket(900), capital: 10000 });
+  approveAll(s);
+  const ran = D.skipDays(s, 200);
+  assert.ok(ran >= 1 && ran < 200, `ran ${ran}`);
+  assert.ok(D.pending(s).length > 0);
+  approveAll(s);
+  const quiet = fund().s;                                         // a calm market: nothing to decide
+  approveAll(quiet);
+  assert.equal(D.skipDays(quiet, 10), 10);
+});
+
+test('the kill switch cancels waiting and approved orders and stops the quants', () => {
+  const { s } = fund();
+  const [a, b] = D.pending(s);
+  D.approve(s, a.id);
   D.halt(s);
+  assert.equal(a.status, 'cancelled'); assert.equal(b.status, 'cancelled');
+  D.advance(s);
   assert.equal(D.pending(s).length, 0);
-  assert.ok(ids.every(id => s.orders.find(o => o.id === id).status === 'cancelled'));
-  D.skipToClose(s);                                   // next open runs no quants while halted
-  assert.equal(D.pending(s).length, 0);
+  assert.equal(Object.keys(s.account.positions).length, 0);
   D.resume(s);
   assert.equal(s.kill.halted, false);
 });
 
-test('unapproved orders expire at the close and the next day opens with new proposals', () => {
-  const s = fresh(); D.openDay(s);
-  const first = D.pending(s).map(o => o.id);
-  const day = s.sim.day;
-  D.skipToClose(s);
-  assert.notEqual(s.sim.day, day);
-  assert.ok(first.every(id => s.orders.find(o => o.id === id).status === 'expired'));
-  assert.ok(D.pending(s).length > 0);
-  assert.equal(s.curve.daily.length, 1);
-});
-
-test('auto mode fills nothing while every quant is unproven', () => {
-  const s = fresh(); D.openDay(s);
+test('auto mode approves only what its rules allow', () => {
+  const { s } = fund();
   D.setMode(s, 'auto');
-  assert.ok(D.pending(s).length > 0);
-  assert.ok(D.pending(s).every(o => !D.riskFor(s, o).auto.auto));
+  assert.equal(D.approved(s).length, 0, 'every quant is unproven');
+  D.updateLimits(s, { autoTiers: ['elite', 'allstar', 'value', 'unproven'], autoMaxOrderPct: 0.25 });
+  assert.ok(D.approved(s).length > 0);
+  assert.ok(D.approved(s).every(o => o.approvedBy === 'auto'));
 });
 
-test('auto mode fills small orders from a proven quant', () => {
-  const s = fresh(); D.openDay(s);
-  s.settings.limits.autoTiers = ['elite', 'allstar', 'value', 'unproven']; // manager widens auto (Risk desk later)
-  s.settings.limits.autoMaxOrderValue = 6000;                                // momentum sizes ~$5k per buy
-  D.setMode(s, 'auto');
-  const filled = s.orders.filter(o => o.status === 'filled' && o.approvedBy === 'auto');
-  assert.ok(filled.length > 0);
-  assert.ok(filled.every(o => o.fillPrice * o.qty <= s.settings.limits.autoMaxOrderValue));
-});
-
-test('paper and off modes', () => {
-  const s = fresh();
-  D.setQuantMode(s, 'mom', 'paper');
-  D.openDay(s);
-  assert.equal(D.pending(s).length, 0);
-  assert.ok(s.signals.length > 0);
-  const t = fresh(); D.setQuantMode(t, 'mom', 'off'); D.openDay(t);
-  assert.equal(t.signals.length, 0);
-});
-
-test('sells realize P&L against cost basis, and calls get graded after 63 days', () => {
-  const s = fresh(); D.openDay(s);
-  const o = D.pending(s)[0];
-  D.approve(s, o.id);
-  for (let d = 0; d < 64; d++) D.skipToClose(s);
-  assert.ok(s.signals.some(x => x.status === 'graded'));
-  const sb = D.scoreboard(s).find(q => q.id === 'mom');
-  assert.ok(sb.graded > 0);
-  // sell the position through the same path
-  s.orders.unshift({ id: s.seq++, status: 'pending', quantId: 'rev', symbol: o.symbol, side: 'sell', qty: s.account.positions[o.symbol].qty, sector: o.sector, assetClass: 'stock' });
-  const before = s.account.realized;
-  assert.equal(D.approve(s, s.orders[0].id).ok, true);
-  assert.notEqual(s.account.realized, before);
-  assert.equal(s.account.positions[o.symbol], undefined);
-});
-
-test('state survives JSON (localStorage) and keeps ticking', () => {
-  const s = fresh(); D.openDay(s);
-  for (let i = 0; i < 10; i++) D.tick(s);
-  const t = JSON.parse(JSON.stringify(s));
-  for (let i = 0; i < TICKS_PER_DAY; i++) D.tick(t);
-  assert.notEqual(t.sim.day, s.sim.day);
-});
-
-test('manager tickets fill through the same risk checks', () => {
-  const s = fresh(); D.openDay(s);
-  assert.equal(D.placeManual(s, { symbol: 'JPM', side: 'buy', qty: 10 }).ok, true);
-  assert.equal(s.account.positions.JPM.openedBy, 'manager');
-  const big = D.placeManual(s, { symbol: 'JPM', side: 'buy', qty: 1000 });
-  assert.equal(big.ok, false);
-  assert.match(big.reason, /JPM|Order value/);
-  assert.equal(D.placeManual(s, { symbol: 'XOM', side: 'sell', qty: 1 }).ok, false);   // nothing to sell
-  assert.equal(D.closePosition(s, 'JPM').ok, true);
-  assert.equal(s.account.positions.JPM, undefined);
-  const sale = s.orders.find(o => o.side === 'sell' && o.symbol === 'JPM');
-  assert.equal(sale.attribution, 'manager');
-  assert.equal(typeof sale.realized, 'number');
-});
-
-test('quant capital cap blocks buys beyond its share of the fund', () => {
-  const s = fresh(); D.openDay(s);
-  D.setQuantAlloc(s, 'mom', 0.06);
-  const [a, b] = D.pending(s);
-  assert.equal(D.approve(s, a.id).ok, true);            // ~5% fits under 6%
-  const r = D.riskFor(s, b);
-  assert.equal(r.approved, false);
-  assert.ok(r.checks.some(c => c.id === 'quantAllocation' && !c.ok));
-  assert.ok(r.fit >= 0 && r.fit < b.qty);
-});
-
-test('changing limits is logged and takes effect', () => {
-  const s = fresh(); D.openDay(s);
-  const o = D.pending(s)[0];
-  assert.equal(D.updateLimits(s, { maxOrderValue: 1000 }), 1);
-  assert.match(s.log[0].text, /maxOrderValue 20000 → 1000/);
-  assert.equal(D.riskFor(s, o).approved, false);
-  D.resetLimits(s);
-  assert.equal(D.riskFor(s, o).approved, true);
-});
-
-test('auto rules set by the manager let auto mode trade', () => {
-  const s = fresh(); D.openDay(s);
-  D.setMode(s, 'auto');
-  assert.equal(s.orders.filter(o => o.approvedBy === 'auto').length, 0);
-  D.updateLimits(s, { autoTiers: ['elite', 'allstar', 'value', 'unproven'], autoMaxOrderValue: 5000 });
-  assert.ok(s.orders.filter(o => o.approvedBy === 'auto').length > 0);
-});
-
-test('day trades and wash sales are tracked', () => {
-  const s = fresh(); D.openDay(s);
-  D.placeManual(s, { symbol: 'JPM', side: 'buy', qty: 10 });
-  assert.equal(D.dayTradesUsed(s), 0);
-  D.placeManual(s, { symbol: 'JPM', side: 'sell', qty: 10 });
-  assert.deepEqual(D.dayTradeLog(s).map(d => d.symbol), ['JPM']);
-  // force a loss sale then a rebuy
-  D.placeManual(s, { symbol: 'XOM', side: 'buy', qty: 10 });
-  s.account.positions.XOM.costBasis *= 2;
-  D.placeManual(s, { symbol: 'XOM', side: 'sell', qty: 10 });
-  D.placeManual(s, { symbol: 'XOM', side: 'buy', qty: 5 });
-  const w = D.washSaleWatch(s).find(x => x.symbol === 'XOM');
-  assert.ok(w && w.loss < 0 && w.rebought);
-});
-
-test('peak NAV is tracked and old saved funds migrate', () => {
-  const s = fresh(); D.openDay(s);
-  for (let i = 0; i < 20; i++) D.tick(s);
-  assert.ok(s.peakEquity >= 100000);
-  const old = JSON.parse(JSON.stringify(s));
-  delete old.peakEquity; delete old.settings.quantAlloc; delete old.fund.spyStart; delete old.settings.limits.maxDrawdownPct;
-  D.migrate(old);
-  assert.ok(old.peakEquity >= 100000 && old.settings.quantAlloc.mom === 0.6 && old.fund.spyStart > 0 && old.settings.limits.maxDrawdownPct === 0.15);
-});
-
-test('a $1,000 fund trades fractional shares with limits scaled to its size', () => {
-  const s = D.freshState({ seed: 11 });
-  assert.equal(s.fund.capital, 1000);
-  const L = s.settings.limits;
-  assert.deepEqual([L.maxOrderValue, L.autoMaxOrderValue, L.minOrderValue], [200, 100, 5]);
-  D.openDay(s);
-  const p = D.pending(s);
-  assert.ok(p.length >= 3, 'momentum still proposes on a small fund');
-  assert.ok(p.some(o => !Number.isInteger(o.qty)), 'fractional sizes');
-  assert.ok(p.every(o => o.qty * s.sim.prices[o.symbol] <= 50.01));
-  assert.equal(D.approve(s, p[0].id).ok, true);
-  assert.ok(D.totals(s).equity > 999 && D.totals(s).equity < 1001);
-  // the minimum order applies to buys
-  assert.equal(D.placeManual(s, { symbol: 'NVDA', side: 'buy', qty: 0.01 }).ok, false);
-  // +/- moves about 1% of the fund
-  const o = p[1];
-  assert.ok(Math.abs(D.nudge(s, o) * s.sim.prices[o.symbol] - 10) < 2);
-  D.resetLimits(s);
-  assert.equal(s.settings.limits.maxOrderValue, 200);
-});
-
-// ---- replay funds on real-shaped history
-import { synthHist } from './helpers.js';
-function replayFund() {
-  const syms = { SPY: 0.0004, QQQ: 0.0009, XLK: 0.0011, XLE: -0.0004, TLT: 0.0001, GLD: 0.0006, SHY: 0.00005, BTC: 0.002 };
-  const h = synthHist(600, syms);
-  D.setMarket(h);
-  return { h, s: D.freshReplayState({ startDate: h.dates[300], capital: 1000 }) };
-}
-
-test('a replay fund starts on the chosen real date with rotation buys of about a third each', () => {
-  const { h, s } = replayFund();
-  assert.equal(s.sim.day, h.dates[300]);
-  D.openDay(s);
-  const p = D.pending(s);
-  const rot = p.filter(o => o.quantId === 'mom');
-  assert.ok(rot.length >= 2 && rot.length <= 3);
-  assert.ok(rot.every(o => o.side === 'buy' && o.assetClass === 'etf'));
-  for (const o of rot) assert.ok(Math.abs(o.qty * s.sim.prices[o.symbol] - 200) < 2, 'a third of the 60% sleeve');
-  for (const o of p) assert.equal(D.approve(s, o.id).ok, true, `${o.symbol}: ${JSON.stringify(D.riskFor(s, o).checks.filter(c => !c.ok))}`);
-  assert.ok(D.totals(s).cash / D.totals(s).equity > 0.05);
-});
-
-test('crypto trend buys coins above trend into its sleeve, weekly, and exits below trend', () => {
-  const { s } = replayFund();
-  D.openDay(s);
-  const c = D.pending(s).filter(o => o.quantId === 'cry');
-  assert.deepEqual(c.map(o => o.symbol), ['BTC']);                       // the only coin in this data
-  assert.ok(Math.abs(c[0].qty * s.sim.prices.BTC - 150) < 1, '15% sleeve');
-  assert.equal(D.approve(s, c[0].id).ok, true);
-  assert.equal(s.account.positions.BTC.openedBy, 'cry');
-  D.skipToClose(s);
-  assert.equal(D.pending(s).filter(o => o.quantId === 'cry').length, 0, 'no new call before the weekly check');
-  assert.equal(s.signals.find(x => x.quantId === 'cry').horizonDays, 21);
-});
-
-test('mean reversion on paper records entries without queuing, and keeps a paper book', () => {
-  const syms = { SPY: 0.0004, XLK: 0.0011, TLT: 0.0001, SHY: 0.00005 };
-  const h = synthHist(600, syms);
-  // A sharp two-day dip in XLK (days 298-299) that stays above its 200-day average.
-  for (const i of [298, 299]) h.closes.XLK[i] = +(h.closes.XLK[i - 1] * 0.975).toFixed(4);
-  for (let i = 300; i < 600; i++) h.closes.XLK[i] = +(h.closes.XLK[i - 1] * 1.002).toFixed(4);
-  D.setMarket(h);
-  const s = D.freshReplayState({ startDate: h.dates[300], capital: 1000 });
-  assert.equal(s.settings.quantModes.mr, 'paper');
-  D.openDay(s);
-  assert.equal(D.pending(s).filter(o => o.quantId === 'mr').length, 0, 'paper: nothing queued');
+test('mean reversion on paper records calls without queuing, and keeps a paper book', () => {
+  const h = synthHist(600, { SPY: 0.0004, XLK: 0.0011, TLT: 0.0001, SHY: 0.00005 });
+  for (const i of [299, 300]) h.closes.XLK[i] = +(h.closes.XLK[i - 1] * 0.975).toFixed(4);
+  const { s } = fund({ hist: h });
+  assert.equal(D.pending(s).filter(o => o.quantId === 'mr').length, 0);
   const call = s.signals.find(x => x.quantId === 'mr');
   assert.ok(call && call.symbol === 'XLK' && call.horizonDays === 10);
   assert.ok('XLK' in s.paperBook.mr);
-  // live mode queues the same entry, sized at a third of the 20% sleeve
-  const t = D.freshReplayState({ startDate: h.dates[300], capital: 1000 });
-  D.setQuantMode(t, 'mr', 'live');
-  D.openDay(t);
-  const o = D.pending(t).find(x => x.quantId === 'mr');
-  assert.ok(o && Math.abs(o.qty * t.sim.prices.XLK - 66.67) < 1);
 });
 
-test('sleeves set sizing and the hard cap together', () => {
-  const { s } = replayFund();
-  D.setSleeve(s, 'cry', 0.10);
-  assert.equal(s.settings.quantAlloc.cry, 0.15);
-  assert.ok(Math.abs(D.sleeveTotal(s) - 0.90) < 1e-9);
-  assert.match(s.log[0].text, /Crypto trend sleeve 15% → 10%/);
-});
-
-test('the rotation only rebalances every 21 trading days', () => {
-  const { s } = replayFund();
-  D.openDay(s);
-  for (const o of D.pending(s)) D.approve(s, o.id);
-  D.skipToClose(s);                                        // day 2
-  assert.equal(D.pending(s).filter(o => o.quantId === 'mom').length, 0);
-  assert.equal(D.daysToRebalance(s), 20);
-  D.skipDays(s, 20);
-  assert.ok(s.log.some(e => /Momentum/.test(e.text) && e.at.startsWith(s.sim.day)));
-});
-
-test('skipping ahead stops at the open where new proposals are waiting', () => {
-  const { s } = replayFund();
-  D.openDay(s);
-  for (const o of D.pending(s)) D.reject(s, o.id);
-  const ran = D.skipDays(s, 60);
-  assert.ok(ran <= 21, `ran ${ran} days`);
-  assert.ok(D.pending(s).length > 0, 'stopped with the rebalance proposals still open');
-  assert.equal(s.sim.tick, 0, 'at the market open');
-});
-
-test('a replay fund saves small, reloads, and replays the same market', () => {
-  const { s } = replayFund();
-  D.openDay(s);
-  for (let i = 0; i < 10; i++) D.tick(s);
-  const json = JSON.stringify(s);
-  assert.ok(json.length < 60000, `saved size ${json.length}`);
-  const t = D.migrate(JSON.parse(json));
-  D.tick(s); D.tick(t);
-  assert.deepEqual(t.sim.prices, s.sim.prices);
-});
-
-test('a replay fund ends cleanly when the history runs out', () => {
-  const { h } = replayFund();
-  const s = D.freshReplayState({ startDate: h.dates[595], capital: 1000 });
-  D.skipDays(s, 10);
-  assert.equal(s.sim.ended, true);
-  assert.equal(D.marketOpen(s), false);
-  assert.ok(s.log.some(e => /latest data/.test(e.text)));
-});
-
-test('ETF holdings are measured against the ETF cap on screen too', () => {
-  const { s } = replayFund();
-  D.openDay(s);
-  for (const o of D.pending(s)) D.approve(s, o.id);
-  const lg = D.largestVsCap(s);
-  assert.equal(lg.cap, s.settings.limits.maxEtfPct);
-  assert.ok(lg.weight < lg.cap);
-  const anyEtf = Object.values(s.account.positions)[0];
-  assert.equal(D.positionCap(s, anyEtf), 0.35);
-  assert.equal(D.positionCap(s, { assetClass: 'stock' }), 0.10);
-  assert.equal(D.positionCap(s, { assetClass: 'crypto' }), null);
+test('crypto trend buys into its sleeve and checks weekly', () => {
+  const { s } = fund();
+  const c = D.pending(s).filter(o => o.quantId === 'cry');
+  assert.deepEqual(c.map(o => o.symbol), ['BTC']);
+  assert.ok(Math.abs(c[0].qty * s.sim.prices.BTC - 150) < 1);
+  D.approve(s, c[0].id); D.advance(s);
+  assert.equal(s.account.positions.BTC.openedBy, 'cry');
+  assert.equal(D.pending(s).filter(o => o.quantId === 'cry').length, 0);
 });
 
 test('two quants can own parts of the same fund, and each sells only its own', () => {
-  const syms = { SPY: 0.0004, XLK: 0.0011, TLT: 0.0001, SHY: 0.00005 };
-  const h = synthHist(600, syms);
-  for (const i of [298, 299]) h.closes.XLK[i] = +(h.closes.XLK[i - 1] * 0.975).toFixed(4);
+  const h = synthHist(600, { SPY: 0.0004, XLK: 0.0011, TLT: 0.0001, SHY: 0.00005 });
+  for (const i of [299, 300]) h.closes.XLK[i] = +(h.closes.XLK[i - 1] * 0.975).toFixed(4);
   D.setMarket(h);
   const s = D.freshReplayState({ startDate: h.dates[300], capital: 1000 });
   D.setQuantMode(s, 'mr', 'live');
-  D.openDay(s);
+  D.decide(s);
   const xlk = D.pending(s).filter(o => o.symbol === 'XLK');
   assert.deepEqual(xlk.map(o => o.quantId).sort(), ['mom', 'mr']);
-  for (const o of xlk) assert.equal(D.approve(s, o.id).ok, true);
+  for (const o of xlk) D.approve(s, o.id);
+  D.advance(s);
   const owners = D.ownersOf(s.account.positions.XLK);
   assert.ok(owners.mom > 0 && owners.mr > 0);
-  assert.ok(Math.abs(D.quantExposure(s, 'mr') - 66.67) < 2);
-  // mean reversion sells its share; the rotation's share stays
   s.orders.push({ id: s.seq++, status: 'pending', quantId: 'mr', symbol: 'XLK', side: 'sell', qty: owners.mr, sector: 'Tech', assetClass: 'etf' });
-  assert.equal(D.approve(s, s.orders.at(-1).id).ok, true);
+  D.approve(s, s.orders.at(-1).id); D.advance(s);
   assert.equal(D.ownedQty(s, 'XLK', 'mr'), 0);
   assert.ok(Math.abs(D.ownedQty(s, 'XLK', 'mom') - owners.mom) < 1e-6);
-  assert.equal(s.orders.at(-1).attribution, 'mr');
 });
 
-test('a replay fund is paid dividends in cash on the ex-date', () => {
-  const h = synthHist(600, { SPY: 0.0004, XLK: 0.0011, TLT: 0.0001, SHY: 0.00005 });
+test('dividends are paid in cash to holders at the previous close', () => {
+  const h = synthHist(600, SYMS);
   h.divs = { TLT: { 302: 0.5 } };
-  D.setMarket(h);
-  const s = D.freshReplayState({ startDate: h.dates[300], capital: 1000 });
-  D.openDay(s);
-  s.orders.push({ id: s.seq++, status: 'pending', quantId: 'manager', symbol: 'TLT', side: 'buy', qty: 1, sector: 'Bonds', assetClass: 'etf' });
-  assert.equal(D.approve(s, s.orders.at(-1).id).ok, true);
+  const { s } = fund({ hist: h });
+  D.placeManual(s, { symbol: 'TLT', side: 'buy', qty: 1 });
+  D.advance(s);                                                   // fills at 301
   const cash = s.account.cash;
-  D.skipToClose(s);                                    // day 300 -> 301
-  assert.equal(s.account.cash, cash, 'no dividend yet');
-  D.skipToClose(s);                                    // day 301 -> 302: TLT goes ex
+  D.advance(s);                                                   // 302: ex-date
   assert.ok(Math.abs(s.account.cash - cash - 0.5) < 1e-9);
   assert.ok(s.log.some(e => /Dividend: TLT/.test(e.text)));
+});
+
+test('a manager ticket fills at the next close; buying and selling the same day is a day trade', () => {
+  const { s } = fund({ capital: 10000 });
+  assert.equal(D.placeManual(s, { symbol: 'GLD', side: 'buy', qty: 2 }).ok, true);
+  D.advance(s);
+  assert.equal(s.account.positions.GLD.qty, 2);
+  D.placeManual(s, { symbol: 'GLD', side: 'sell', qty: 1 });
+  D.placeManual(s, { symbol: 'GLD', side: 'buy', qty: 1 });
+  D.advance(s);
+  assert.deepEqual(D.dayTradeLog(s).map(d => d.symbol), ['GLD']);
+});
+
+test('the rotation trims a winner that has grown past its band', () => {
+  const { s } = fund({ capital: 10000 });
+  for (const o of D.pending(s)) if (o.quantId === 'mom') D.approve(s, o.id);
+  D.advance(s);
+  const sym = Object.keys(s.account.positions).find(x => D.ownedQty(s, x, 'mom') > 0);
+  s.account.positions[sym].qty *= 2; s.account.positions[sym].owners.mom *= 2;  // it doubled
+  s.nextRebalance = s.daysRun;
+  s.decidedOn = null; D.decide(s);
+  const trim = D.pending(s).find(o => o.symbol === sym && o.quantId === 'mom');
+  assert.equal(trim?.side, 'sell');
+});
+
+test('saved funds stay small, reload, and keep the same market', () => {
+  const { s } = fund();
+  approveAll(s);
+  for (let i = 0; i < 30; i++) D.advance(s);
+  const json = JSON.stringify(s);
+  assert.ok(json.length < 120000, `saved size ${json.length}`);
+  const t = D.migrate(JSON.parse(json));
+  D.advance(s); D.advance(t);
+  assert.deepEqual(t.sim.prices, s.sim.prices);
+  assert.equal(t.daysRun, s.daysRun);
+});
+
+test('a version 3 fund (intraday) is converted, keeping its positions and limits', () => {
+  const { h, s } = fund({ capital: 1000 });
+  approveAll(s); D.advance(s);
+  const v3 = JSON.parse(JSON.stringify(s));
+  Object.assign(v3, { version: 3, startOfDayEquity: 990, openedDay: v3.sim.day });
+  Object.assign(v3.sim, { cursor: v3.sim.cursor + 1, tick: 40, seed: 7, dayOpen: {} });
+  v3.settings.speed = 1;
+  v3.settings.limits = { ...v3.settings.limits, maxOrderValue: 400, autoMaxOrderValue: 100 };
+  v3.orders.push({ id: 999, status: 'pending', quantId: 'mom', symbol: 'XLK', side: 'buy', qty: 1 });
+  const m = D.migrate(v3);
+  assert.equal(m.version, D.STATE_VERSION);
+  assert.equal(m.sim.day, h.dates[s.sim.cursor]);
+  assert.deepEqual(Object.keys(m.account.positions).sort(), Object.keys(s.account.positions).sort());
+  assert.equal(m.settings.limits.maxOrderPct, 0.4);
+  assert.equal(m.settings.limits.maxOrderValue, null);
+  assert.equal(m.settings.speed, 'pause');
+  assert.equal(m.orders.find(o => o.id === 999).status, 'expired');
+  assert.ok(D.advance(m));
+});
+
+// The app must trade the strategy the backtest measures. A rotation-only fund in auto mode,
+// with limits out of the way, should finish within a small tolerance of the backtest's
+// "momentum rotation, top 3" run on the same history (same timing, same costs).
+test('the app and the backtest agree on the rotation', () => {
+  const h = rotatingMarket(1100);
+  D.setMarket(h);
+  const start = 300, INVESTED = 0.97;
+  const s = D.freshReplayState({ startDate: h.dates[start], capital: 1e6 });
+  Object.assign(s.settings.quantModes, { rev: 'off', mr: 'off', cry: 'off' });
+  s.settings.sleeves.mom = INVESTED; s.settings.quantAlloc.mom = null;
+  s.settings.rotationBand = 0;
+  s.settings.limits = { ...s.settings.limits, maxEtfPct: 1, minCashPct: 0, maxOrderPct: 1, dailyLossLimitPct: -1, maxDrawdownPct: null, minOrderValue: 0, autoTiers: ['elite', 'allstar', 'value', 'unproven'], autoMaxOrderPct: 1, sectorLimits: {} };
+  s.settings.mode = 'auto';
+  D.decide(s);
+  while (D.advance(s));
+  const app = s.curve.daily.map(d => d.equity);
+
+  const universe = ROTATION_UNIVERSE.filter(x => h.closes[x]);
+  const inner = momentumRotation(universe, { topN: 3, cash: null });
+  const strat = (hist, t, c) => { const w = inner(hist, t, c); return Object.fromEntries(Object.entries(w).map(([k, v]) => [k, v * INVESTED])); };
+  const bt = simulate(h, strat, { from: h.dates[start], costBps: x => (x === 'SHY' ? 1 : 10), capital: 1e6 }).equity.map(e => e.value);
+
+  assert.equal(app.length, bt.length);
+  const years = (app.length - 1) / 252;
+  const cagr = v => Math.pow(v.at(-1) / v[0], 1 / years) - 1;
+  const gap = Math.abs(cagr(app) - cagr(bt));
+  if (process.env.SHOW) console.log(`app ${(cagr(app) * 100).toFixed(3)}%/yr vs backtest ${(cagr(bt) * 100).toFixed(3)}%/yr`);
+  assert.ok(gap < 0.003, `app ${(cagr(app) * 100).toFixed(2)}%/yr vs backtest ${(cagr(bt) * 100).toFixed(2)}%/yr`);
+  const fills = s.orders.filter(o => o.status === 'filled').length;
+  assert.ok(fills > 20, `the rotation traded (${fills} fills)`);
+});
+
+test('a long-running fund is compacted without changing any quant\'s record', () => {
+  const h = rotatingMarket(1100);
+  D.setMarket(h);
+  const s = D.freshReplayState({ startDate: h.dates[300], capital: 10000 });
+  D.decide(s);
+  for (let i = 0; i < 400; i++) D.advance(s);                    // nobody answers: proposals expire
+  const before = JSON.stringify(D.scoreboard(s).map(q => [q.id, q.graded, q.hits]));
+  D.compact(s);
+  assert.equal(JSON.stringify(D.scoreboard(s).map(q => [q.id, q.graded, q.hits])), before);
+  const month = h.dates[s.sim.cursor - 21];
+  assert.ok(!s.orders.some(o => o.status === 'expired' && o.created < month), 'old expired proposals dropped');
+  assert.ok(s.orders.some(o => o.status === 'expired'), 'recent ones kept');
+  assert.ok(s.signals.filter(x => x.status === 'graded').every(x => !x.thesis || x.issuedOn >= h.dates[s.sim.cursor - 63]));
+  assert.ok(s.log.length <= D.LOG_LIMIT);
 });
