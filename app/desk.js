@@ -44,7 +44,7 @@ const QUANT_OWNED = ['mom', 'mr', 'cry'];
 export const quantName = id => (id === 'manager' ? 'Manager' : QUANTS.find(q => q.id === id)?.name || id);
 export const DEFAULT_CAPITAL = 1000;
 export const DEFAULT_COST_BPS = 10;          // spread and slippage per trade, as the backtest
-export const LOG_LIMIT = 5000;               // log entries kept (newest first)
+export const LOG_LIMIT = 2500;               // log entries kept (newest first)
 export const CURVE_LIMIT = 20000;            // daily NAV points kept (about 80 years)
 // Trading cost for a symbol: short Treasuries trade for about 1 bp, everything else costBps.
 export const costBpsFor = (state, sym) => (sym === 'SHY' ? 1 : state.settings.costBps ?? DEFAULT_COST_BPS);
@@ -667,15 +667,35 @@ export function advance(state) {
   if (expired.some(o => o.quantId === 'mom')) state.nextRebalance = Math.min(state.nextRebalance, state.daysRun + 1);
   state.daysRun++;
   const eq = totals(state).equity;
-  state.curve.daily.push({ date: state.sim.day, equity: eq, spy: state.sim.prices.SPY });
+  state.curve.daily.push({ date: state.sim.day, equity: +eq.toFixed(2), spy: state.sim.prices.SPY });
   if (state.curve.daily.length > CURVE_LIMIT) state.curve.daily.shift();
   state.peakEquity = Math.max(state.peakEquity, eq);
   log(state, 'system', `Close ${state.sim.day}. NAV ${usd(eq)} (${pct(eq / state.prevEquity - 1)} on the day).` +
     (expired.length ? ` ${expired.length} unanswered proposal${expired.length > 1 ? 's' : ''} expired.` : ''));
   updateBreaker(state, eq);
   gradeDue(state);
+  if (state.daysRun % 21 === 0) compact(state);
   decide(state);
   return true;
+}
+
+// Keeps a long-running fund small enough to save in the browser: expired proposals are dropped
+// after a month, and orders and graded calls older than a quarter keep their numbers but not
+// their explanation text. Runs every 21 trading days.
+const KEEP_DAYS = 63;
+export function compact(state) {
+  const dates = state.sim.hist?.dates || [];
+  const cutoff = (n) => dates[Math.max(0, state.sim.cursor - n)] || '';
+  const month = cutoff(21), quarter = cutoff(KEEP_DAYS);
+  state.orders = state.orders.filter(o => !(o.status === 'expired' && (o.created || '') < month));
+  for (const o of state.orders) if (o.thesis && !['pending', 'approved'].includes(o.status) && (o.created || '') < quarter) delete o.thesis;
+  const r6 = v => (typeof v === 'number' ? +v.toPrecision(6) : v);
+  for (const x of state.signals) {
+    if (x.status === 'open' || (x.issuedOn || '') >= quarter) continue;
+    delete x.thesis;
+    if (x.result) for (const k of Object.keys(x.result)) x.result[k] = r6(x.result[k]);
+    x.entryPrice = r6(x.entryPrice); x.benchEntry = r6(x.benchEntry);
+  }
 }
 
 // Runs up to n trading days, but stops at the first close where proposals are waiting, so a

@@ -279,3 +279,19 @@ test('the app and the backtest agree on the rotation', () => {
   const fills = s.orders.filter(o => o.status === 'filled').length;
   assert.ok(fills > 20, `the rotation traded (${fills} fills)`);
 });
+
+test('a long-running fund is compacted without changing any quant\'s record', () => {
+  const h = rotatingMarket(1100);
+  D.setMarket(h);
+  const s = D.freshReplayState({ startDate: h.dates[300], capital: 10000 });
+  D.decide(s);
+  for (let i = 0; i < 400; i++) D.advance(s);                    // nobody answers: proposals expire
+  const before = JSON.stringify(D.scoreboard(s).map(q => [q.id, q.graded, q.hits]));
+  D.compact(s);
+  assert.equal(JSON.stringify(D.scoreboard(s).map(q => [q.id, q.graded, q.hits])), before);
+  const month = h.dates[s.sim.cursor - 21];
+  assert.ok(!s.orders.some(o => o.status === 'expired' && o.created < month), 'old expired proposals dropped');
+  assert.ok(s.orders.some(o => o.status === 'expired'), 'recent ones kept');
+  assert.ok(s.signals.filter(x => x.status === 'graded').every(x => !x.thesis || x.issuedOn >= h.dates[s.sim.cursor - 63]));
+  assert.ok(s.log.length <= D.LOG_LIMIT);
+});

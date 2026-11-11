@@ -15,7 +15,7 @@ import { loadHistory, earliestStart } from './replay.js';
 
 const KEY = 'tradingFloor.v1';
 const BACKUP_KEY = 'tradingFloor.backups';
-const MAX_BACKUPS = 3;
+const MAX_BACKUPS = 3;  // dropped oldest-first whenever the fund itself needs the room
 const $ = id => document.getElementById(id);
 
 const DESKS = [
@@ -78,7 +78,15 @@ function save(force) {
   dirty++;
   if (!force && dirty < 10) return;
   dirty = 0;
-  try { localStorage.setItem(KEY, JSON.stringify(state)); } catch { /* storage full or blocked: keep running */ }
+  const json = JSON.stringify(state);
+  try { localStorage.setItem(KEY, json); return; } catch { /* full: make room below */ }
+  // The fund itself comes first: drop backups, oldest first, until it fits.
+  const list = readBackups();
+  while (list.length) {
+    list.pop();
+    try { localStorage.setItem(BACKUP_KEY, JSON.stringify(list)); localStorage.setItem(KEY, json); ui.backups = list.map(({ state: _s, ...m }) => m); return; } catch { /* keep dropping */ }
+  }
+  toast('This browser is out of storage, so the fund could not be saved here.');
 }
 function replaceFund(next, reason) {
   backup(state, reason);
