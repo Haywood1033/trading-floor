@@ -32,15 +32,21 @@ export function createReplay(hist, { startDate, seed = 7 }) {
   return sim;
 }
 
-// Rebuilds the unsaved views the rest of the app reads: history (closes up to yesterday,
-// per symbol, without gaps) and dates. Call after loading a saved fund and after each day.
+// Rebuilds the unsaved views the rest of the app reads. Call after loading a saved fund and
+// after each day.
+//   history    total-return series up to yesterday, per symbol, without gaps (what quants read)
+//   prevClose  yesterday's actual close per symbol (for day moves on screen)
+//   dates      trading dates up to yesterday
 export function attach(sim, hist) {
-  const history = {};
-  for (const [s, arr] of Object.entries(hist.closes)) {
+  const history = {}, prevClose = {};
+  const sig = hist.tr || hist.closes;
+  for (const [s, arr] of Object.entries(sig)) {
     const h = [];
     for (let i = 0; i < sim.cursor; i++) if (arr[i] != null) h.push(arr[i]);
     if (h.length) history[s] = h;
+    for (let i = sim.cursor - 1; i >= 0; i--) if (hist.closes[s][i] != null) { prevClose[s] = hist.closes[s][i]; break; }
   }
+  Object.defineProperty(sim, 'prevClose', { value: prevClose, enumerable: false, configurable: true, writable: true });
   Object.defineProperty(sim, 'hist', { value: hist, enumerable: false, configurable: true, writable: true });
   Object.defineProperty(sim, 'history', { value: history, enumerable: false, configurable: true, writable: true });
   Object.defineProperty(sim, 'dates', { value: hist.dates.slice(0, sim.cursor), enumerable: false, configurable: true, writable: true });
@@ -92,11 +98,26 @@ export function openNextDay(sim) {
   sim.dayOpen = { ...sim.prices };
 }
 
-// Closes strictly after `date`, up to the last completed day only (never the future).
+// Dividends going ex today, per share: { SYM: amount }. Holders at yesterday's close get paid.
+export function dividendsToday(sim) {
+  const out = {};
+  for (const [s, byIndex] of Object.entries(sim.hist.divs || {})) if (byIndex[sim.cursor]) out[s] = byIndex[sim.cursor];
+  return out;
+}
+
+// Prices strictly after `date`, up to the last completed day only (never the future), as total
+// return: each is the actual close on `date` grown by the fund's return since, dividends
+// included. Used to grade calls.
 export function closesAfter(sim, symbol, date) {
-  const arr = sim.hist.closes[symbol] || [];
+  const tr = (sim.hist.tr || sim.hist.closes)[symbol] || [];
+  const raw = sim.hist.closes[symbol] || [];
+  let base = null;
+  for (let i = 0; i < sim.cursor && sim.hist.dates[i] <= date; i++) if (tr[i] != null) base = i;
   const out = [];
-  for (let i = 0; i < sim.cursor; i++) if (sim.hist.dates[i] > date && arr[i] != null) out.push(arr[i]);
+  for (let i = 0; i < sim.cursor; i++) {
+    if (sim.hist.dates[i] <= date || tr[i] == null) continue;
+    out.push(base == null ? raw[i] : raw[base] * tr[i] / tr[base]);
+  }
   return out;
 }
 

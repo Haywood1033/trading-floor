@@ -100,3 +100,12 @@ test('a missing close carries the last known price instead of zero', () => {
   const m = metrics(r.equity);
   assert.ok(Number.isFinite(m.cagr) && m.maxDrawdown > -0.01);
 });
+
+test('dividends are paid in cash to holders on the ex-date', () => {
+  const h = hist(300, { TLT: () => 0, SHY: () => 0 });
+  h.divs = { TLT: { 100: 1, 200: 1 } };               // $1 a share twice on a $100 fund
+  const r = simulate(h, buyAndHold('TLT'), { from: h.dates[0], costBps: 0 });
+  // 100 shares get $100; the monthly rebalance reinvests it (101 shares), which get $101.
+  assert.ok(Math.abs(r.equity.at(-1).value - 10201) < 1e-6);
+  assert.ok(Math.abs(r.dividends - 201) < 1e-6);
+});

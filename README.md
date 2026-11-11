@@ -55,8 +55,12 @@ edited on the Risk desk.
 ## Price history and the fair backtest (GitHub Actions, no accounts or keys)
 
 `.github/workflows/history.yml` runs each weekday after the close and on demand:
-- `scripts/fetch-history.js` pulls daily closes from Yahoo for the 21-fund ETF universe
-  (`src/data/universe.js`) plus BTC and ETH, into `state/history/` (one file per year).
+- `scripts/fetch-history.js` pulls daily closes and dividends from Yahoo for the 21-fund ETF
+  universe (`src/data/universe.js`) plus BTC and ETH, into `state/history/` (one file per year).
+  It stores actual closes and dividend payments, which never change once a day has passed, so
+  past years are frozen: only last year and this year are ever rewritten. Signals read a
+  total-return series built from them; holdings are valued at actual closes and paid dividends
+  in cash on the ex-date, in both the backtest and the app.
 - `scripts/backtest-etf.js` runs `src/portfolioBacktest.js` on that history and writes
   `state/backtest-etf.json`, which the Reports desk shows.
 

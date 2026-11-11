@@ -44,6 +44,7 @@ function metrics(closes, benchCloses, benchmark) {
 // snapshot: risk-manager snapshot (positions carry qty, price, sector, assetClass, costBasis?)
 // bars: { [symbol]: number[] } daily closes, oldest first. Include SPY, and BTC for crypto.
 // Returns { reviews: [...one per holding], proposals: [...orders for the approval queue] }
+// Signals come from `bars`; orders are priced at each position's own price (pos.price).
 export function reviewPortfolio(snapshot, bars, { limits = DEFAULT_LIMITS, stockBenchmark = 'SPY', cryptoBenchmark = 'BTC', fractional = false } = {}) {
   const totals = summarize(snapshot);
   const reviews = [];
@@ -77,7 +78,7 @@ export function reviewPortfolio(snapshot, bars, { limits = DEFAULT_LIMITS, stock
 
     if (verdict === 'sell') {
       proposals.push({
-        quantId: QUANT_ID, symbol, side: 'sell', qty: pos.qty, price: m.price,
+        quantId: QUANT_ID, symbol, side: 'sell', qty: pos.qty, price: pos.price ?? m.price,
         sector: pos.sector, assetClass: pos.assetClass,
         strength: score / MAX_SCORE, confidence: 0.55 + 0.05 * (score - SELL_AT), horizon: '3m',
         thesis: `Stale: ${reasons.join(', ')}. Sell all, frees ${usd(value)}.${taxNote}`
@@ -88,10 +89,10 @@ export function reviewPortfolio(snapshot, bars, { limits = DEFAULT_LIMITS, stock
     // Over the single-position cap: trim back to just under it, whatever the trend.
     if (!isCrypto && weight > limits.maxPositionPct) {
       const target = (limits.maxPositionPct - 0.005) * totals.equity;
-      const raw = (value - target) / m.price;
+      const raw = (value - target) / (pos.price ?? m.price);
       const qty = fractional ? Math.min(pos.qty, Math.ceil(raw * 1000) / 1000) : Math.ceil(raw);
       proposals.push({
-        quantId: QUANT_ID, symbol, side: 'sell', qty, price: m.price,
+        quantId: QUANT_ID, symbol, side: 'sell', qty, price: pos.price ?? m.price,
         sector: pos.sector, assetClass: pos.assetClass,
         strength: 0.5, confidence: 0.6, horizon: 'now',
         thesis: `Over the ${pp(limits.maxPositionPct)} position limit at ${(weight * 100).toFixed(1)}%. Trim ${qty} to get back under.` +

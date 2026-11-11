@@ -7,6 +7,8 @@
 // - Every rebalance pays costBps on the value traded (spread and slippage; commissions are 0).
 //   costBps can be a number or a function of the symbol (cash-like SHY trades for ~1 bp).
 // - A fund only becomes eligible once it has a full year of history at that date.
+// - Signals read the total-return series (hist.tr: dividends reinvested). Holdings are valued at
+//   actual closes, and dividends are paid into cash on their ex-date (hist.divs).
 
 import { sma } from './quants/indicators.js';
 import { mrSignals, RULES as MR_RULES } from './quants/meanReversion.js';
@@ -14,15 +16,17 @@ import { cryptoSignals, COINS } from './quants/cryptoTrend.js';
 
 const YEAR = 252, MONTH = 21;
 
+const sig = hist => hist.tr || hist.closes;
 function series(hist, sym, t) {
+  const arr = sig(hist)[sym];
   const out = [];
-  for (let i = 0; i <= t; i++) { const v = hist.closes[sym]?.[i]; if (v != null) out.push(v); }
+  for (let i = 0; i <= t; i++) { const v = arr?.[i]; if (v != null) out.push(v); }
   return out;
 }
 
 // The last n known closes up to day t (fast path for strategies checked every day).
 function tail(hist, sym, t, n) {
-  const arr = hist.closes[sym];
+  const arr = sig(hist)[sym];
   if (!arr) return [];
   const out = [];
   for (let i = t; i >= 0 && out.length < n; i--) if (arr[i] != null) out.push(arr[i]);
@@ -115,7 +119,13 @@ export function simulate(hist, strategy, { from, to, costBps = 10, every = MONTH
   const price = (s, t) => { const v = hist.closes[s]?.[t]; if (v != null) lastSeen[s] = v; return v ?? lastSeen[s] ?? null; };
   const value = t => cashBal + Object.entries(holdings).reduce((a, [s, u]) => a + u * (price(s, t) ?? 0), 0);
 
+  let dividends = 0;
   for (let t = start; t <= end; t++) {
+    // Dividends: whoever held the fund going into its ex-date gets the cash.
+    if (hist.divs) for (const [s, u] of Object.entries(holdings)) {
+      const d = hist.divs[s]?.[t];
+      if (d) { cashBal += u * d; dividends += u * d; }
+    }
     if (pending) {                                    // execute yesterday's decision at today's close
       const v = value(t);
       const target = {};
@@ -142,7 +152,7 @@ export function simulate(hist, strategy, { from, to, costBps = 10, every = MONTH
     }
     equity.push({ date: hist.dates[t], value: value(t) });
   }
-  return { equity, costs, turnoverPerYear: turnover / (equity.length / YEAR), rebalances };
+  return { equity, costs, dividends, turnoverPerYear: turnover / (equity.length / YEAR), rebalances };
 }
 
 // ---- metrics
