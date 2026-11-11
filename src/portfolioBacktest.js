@@ -63,7 +63,7 @@ export function momentumRotation(universe, { topN = 3, cash = 'SHY', trendFilter
     const picks = scored.slice(0, topN).filter(x => x.ok).map(x => x.s);
     const w = Object.fromEntries(picks.map(s => [s, 1 / topN]));
     const idle = 1 - picks.length / topN;
-    if (idle > 1e-9) w[cash] = (w[cash] || 0) + idle;
+    if (idle > 1e-9 && cash) w[cash] = (w[cash] || 0) + idle;
     return w;
   };
 }
@@ -84,7 +84,7 @@ export function meanReversion(universe, { cash = 'SHY', rules = MR_RULES } = {})
     const w = {};
     for (const s of Object.keys(entered)) w[s] = entries.some(e => e.symbol === s) ? 1 / rules.maxPositions : (weights[s] || 0);
     const used = Object.values(w).reduce((a, b) => a + b, 0);
-    if (used < 1 - 1e-9) w[cash] = 1 - used;
+    if (used < 1 - 1e-9 && cash) w[cash] = 1 - used;
     return w;
   };
 }
@@ -96,11 +96,11 @@ export function cryptoTrend({ coins = COINS, cash = 'SHY' } = {}) {
     const known = {};
     for (const s of coins) { const c = tail(hist, s, t, 260); if (c.length && hist.closes[s][t] != null) known[s] = c; }
     const live = coins.filter(s => known[s]?.length > 200);
-    if (!live.length) return { [cash]: 1 };
+    if (!live.length) return cash ? { [cash]: 1 } : {};
     const { want } = cryptoSignals(known, live);
     const w = Object.fromEntries(want.map(s => [s, 1 / live.length]));
     const used = want.length / live.length;
-    if (used < 1 - 1e-9) w[cash] = 1 - used;
+    if (used < 1 - 1e-9 && cash) w[cash] = 1 - used;
     return w;
   };
 }

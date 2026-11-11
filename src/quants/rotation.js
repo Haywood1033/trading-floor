@@ -27,7 +27,7 @@ export function rankUniverse(bars, universe) {
 
 // held: { SYM: qty } positions this quant owns. bars: series for the signal (total return).
 // prices: actual prices to size orders with (the last bar is used if a price is missing).
-export function runRotation(snapshot, bars, { universe, held = {}, topN = 3, cashBuffer = 0.05, minOrderValue = 0, metaFor = () => ({}), prices = {} } = {}) {
+export function runRotation(snapshot, bars, { universe, held = {}, topN = 3, cashBuffer = 0.05, minOrderValue = 0, metaFor = () => ({}), prices = {}, band = 0.10 } = {}) {
   const equity = summarize(snapshot).equity;
   const ranked = rankUniverse(bars, universe);
   const picks = ranked.slice(0, topN).filter(r => r.ok).map(r => r.symbol);
@@ -48,10 +48,20 @@ export function runRotation(snapshot, bars, { universe, held = {}, topN = 3, cas
   for (const sym of picks) {
     const have = (held[sym] || 0) * price(sym);
     const gap = target - have;
-    if (gap < Math.max(minOrderValue, target * 0.1)) continue;    // within 10% of target: leave it
+    const r = ranked.find(x => x.symbol === sym);
+    if (Math.abs(gap) <= Math.max(minOrderValue, target * band)) continue;   // within the band: leave it
+    if (gap < 0) {                                                  // a winner past its band: trim
+      const qty = Math.floor(-gap / price(sym) * 1000) / 1000;
+      if (qty <= 0 || !(held[sym] > 0)) continue;
+      proposals.push({
+        quantId: QUANT_ID, symbol: sym, side: 'sell', qty: Math.min(qty, held[sym]), price: price(sym), assetClass: 'etf', sector: metaFor(sym)?.sector,
+        strength: 1, confidence: 0.55, horizon: '1m',
+        thesis: `Rotation trim: ${sym} has grown to ~${(have / equity * 100).toFixed(0)}% of the fund; sell ~$${Math.round(-gap)} back to its ~${(target / equity * 100).toFixed(0)}% share.`
+      });
+      continue;
+    }
     const qty = Math.floor(gap / price(sym) * 1000) / 1000;
     if (qty <= 0) continue;
-    const r = ranked.find(x => x.symbol === sym);
     proposals.push({
       quantId: QUANT_ID, symbol: sym, side: 'buy', qty, price: price(sym), assetClass: 'etf', sector: metaFor(sym)?.sector,
       strength: 1, confidence: 0.55, horizon: '1m',

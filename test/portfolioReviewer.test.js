@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { reviewPortfolio } from '../src/quants/portfolioReviewer.js';
 import { evaluateOrder } from '../src/risk/riskManager.js';
-import { sampleBars, samplePortfolio } from '../src/data/sample.js';
+import { sampleBars, samplePortfolio } from './sampleData.js';
 import { sma, ret, drawdownFromHigh } from '../src/quants/indicators.js';
 
 // Straight-line series: start -> end over n days.
