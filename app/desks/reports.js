@@ -84,13 +84,13 @@ function brief(s, day) {
   const signals = entries.filter(e => e.kind === 'signal' || e.kind === 'paper');
   const other = entries.filter(e => e.kind === 'system' && /Graded|limits|resumed|Switched|set to|capital cap/.test(e.text));
   const halts = entries.filter(e => e.kind === 'halt');
-  const expired = entries.map(e => e.text.match(/(\d+) unapproved order/)).find(Boolean);
+  const expired = entries.map(e => e.text.match(/(\d+) unanswered proposal/)).find(Boolean);
   const fundRet = close ? close.equity / prevEq - 1 : null;
   const spyRet = close && close.spy && prevSpy ? close.spy / prevSpy - 1 : null;
   const list = (title, items) => (items.length ? `<p><b>${title}</b></p><ul class="rules">${items.map(e => `<li>${esc(e.text)}</li>`).join('')}</ul>` : '');
   return `<div class="brief">
     ${close ? `<p>The fund closed at <b class="num">${D.usd(close.equity)}</b>, <span class="${cls(fundRet)}">${D.pct(fundRet)}</span> on the day${spyRet != null ? `, against SPY <span class="${cls(spyRet)}">${D.pct(spyRet)}</span>` : ''}.</p>` : '<p>This day has not closed yet.</p>'}
-    <p>${fills.length} trade${fills.length === 1 ? '' : 's'} filled, ${vetoes.length} blocked by risk${expired ? `, ${expired[1]} proposal${expired[1] === '1' ? '' : 's'} expired unapproved` : ''}.</p>
+    <p>${fills.length} trade${fills.length === 1 ? '' : 's'} filled, ${vetoes.length} blocked by risk${expired ? `, ${expired[1]} proposal${expired[1] === '1' ? '' : 's'} expired unanswered` : ''}.</p>
     ${list('Quants', signals)}${list('Trades', fills)}${list('Blocked', vetoes)}${list('Kill switch', halts)}${list('Other', other)}
   </div>`;
 }
@@ -100,7 +100,7 @@ export function renderReports(s, ui) {
   const day = ui.drafts.briefDay && closed.includes(ui.drafts.briefDay) ? ui.drafts.briefDay : closed[0];
   const dailyBrief = closed.length
     ? `<div class="search"><label for="briefDay" class="muted" style="align-self:center">Day</label><select id="briefDay" data-draft>${closed.slice(0, 60).map(x => `<option ${x === day ? 'selected' : ''}>${x}</option>`).join('')}</select></div>${brief(s, day)}`
-    : '<div class="empty">The first brief appears after the first simulated close. Use "Skip to close" to get there.</div>';
+    : '<div class="empty">No closes yet.</div>';
 
   // Performance by quant
   const eq = D.totals(s).equity;
@@ -116,12 +116,13 @@ export function renderReports(s, ui) {
       <td class="r num">${src.q ? (src.q.graded ? `${p1(src.q.hitRate)} of ${src.q.graded}` : '0 graded') : '-'}</td><td>${src.q ? tierChip(src.q.tier) : ''}</td></tr>`;
   }).join('');
   const perf = `<div class="tablewrap"><table><thead><tr><th>Source</th><th class="r">Trades</th><th class="r">Holding now</th><th class="r">Realized</th><th class="r">Unrealized</th><th class="r">Calls right</th><th>Tier</th></tr></thead><tbody>${rows}</tbody></table></div>
-    <div class="pad muted" style="font-size:12px">P&amp;L is credited to whoever opened the position. "Calls right" counts every call, traded or not.</div>`;
+    <div class="pad muted" style="font-size:12px">P&amp;L is credited to whoever opened the position, after trading costs. "Calls right" counts every call, traded or not.
+      Since inception the fund paid ${D.usd(s.account.fees || 0, 2)} in trading costs and received ${D.usd(s.account.dividends || 0, 2)} in dividends.</div>`;
 
   // Monthly
   const months = {};
-  let prev = { equity: s.fund.capital, spy: s.fund.spyStart };
-  for (const d of s.curve.daily) {
+  let prev = s.curve.daily[0] || { equity: s.fund.capital, spy: s.fund.spyStart };
+  for (const d of s.curve.daily.slice(1)) {
     const m = d.date.slice(0, 7);
     months[m] ||= { start: prev, end: d, days: 0 };
     months[m].end = d; months[m].days++;
@@ -136,9 +137,12 @@ export function renderReports(s, ui) {
   const monthly = mrows ? `<div class="tablewrap"><table><thead><tr><th>Month</th><th class="r">Days</th><th class="r">End NAV</th><th class="r">Fund</th><th class="r">SPY</th><th class="r">vs SPY</th><th class="r">Trades</th></tr></thead><tbody>${mrows}</tbody></table></div>`
     : '<div class="empty">Fills in as simulated days close.</div>';
 
+  // Thin long histories to about 600 points so the chart stays light (keeps the last point).
+  const every = Math.max(1, Math.ceil(s.curve.daily.length / 600));
+  const pts = s.curve.daily.filter((_, i, a) => i % every === 0 || i === a.length - 1);
   const chart = lineChart([
-    { name: 'Fund', color: 'var(--accent)', values: [s.fund.capital, ...s.curve.daily.map(d => d.equity)].map(v => v / s.fund.capital * 100) },
-    { name: 'SPY', color: 'var(--muted)', dash: true, values: [s.fund.spyStart, ...s.curve.daily.map(d => d.spy ?? null)].map(v => (v == null ? null : v / s.fund.spyStart * 100)) }
+    { name: 'Fund', color: 'var(--accent)', values: pts.map(d => d.equity / s.fund.capital * 100) },
+    { name: 'SPY', color: 'var(--muted)', dash: true, values: pts.map(d => (d.spy == null ? null : d.spy / s.fund.spyStart * 100)) }
   ], [s.fund.inception, s.curve.daily.at(-1)?.date || ''], { fmtY: v => v.toFixed(1) });
 
   return `<div class="desk-head"><h1>Reports</h1><p>The evidence behind the strategy, what the desk did, and how the fund is doing.</p></div>
